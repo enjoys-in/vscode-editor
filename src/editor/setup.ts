@@ -35,11 +35,9 @@ import getThemeServiceOverride from '@codingame/monaco-vscode-theme-service-over
 import getLanguagesServiceOverride from '@codingame/monaco-vscode-languages-service-override';
 import getSecretStorageServiceOverride from '@codingame/monaco-vscode-secret-storage-service-override';
 import getAuthenticationServiceOverride from '@codingame/monaco-vscode-authentication-service-override';
-import getScmServiceOverride from '@codingame/monaco-vscode-scm-service-override';
 import getBannerServiceOverride from '@codingame/monaco-vscode-view-banner-service-override';
 import getStatusBarServiceOverride from '@codingame/monaco-vscode-view-status-bar-service-override';
 import getTitleBarServiceOverride from '@codingame/monaco-vscode-view-title-bar-service-override';
-import getDebugServiceOverride from '@codingame/monaco-vscode-debug-service-override';
 import getPreferencesServiceOverride from '@codingame/monaco-vscode-preferences-service-override';
 import getSnippetServiceOverride from '@codingame/monaco-vscode-snippets-service-override';
 import getOutputServiceOverride from '@codingame/monaco-vscode-output-service-override';
@@ -55,7 +53,6 @@ import getLifecycleServiceOverride from '@codingame/monaco-vscode-lifecycle-serv
 import getWorkspaceTrustOverride from '@codingame/monaco-vscode-workspace-trust-service-override';
 import getLogServiceOverride from '@codingame/monaco-vscode-log-service-override';
 import getWorkingCopyServiceOverride from '@codingame/monaco-vscode-working-copy-service-override';
-import getTestingServiceOverride from '@codingame/monaco-vscode-testing-service-override';
 import getExplorerServiceOverride from '@codingame/monaco-vscode-explorer-service-override';
 import getOutlineServiceOverride from '@codingame/monaco-vscode-outline-service-override';
 import getQuickAccessServiceOverride from '@codingame/monaco-vscode-quickaccess-service-override';
@@ -80,13 +77,19 @@ import '@codingame/monaco-vscode-references-view-default-extension';
 import '@codingame/monaco-vscode-search-result-default-extension';
 import '@codingame/monaco-vscode-configuration-editing-default-extension';
 
-// Language features (intellisense, validation, formatting)
-import '@codingame/monaco-vscode-typescript-language-features-default-extension';
-import '@codingame/monaco-vscode-json-language-features-default-extension';
-import '@codingame/monaco-vscode-html-language-features-default-extension';
-import '@codingame/monaco-vscode-css-language-features-default-extension';
-import '@codingame/monaco-vscode-markdown-language-features-default-extension';
-import '@codingame/monaco-vscode-emmet-default-extension';
+// Language features — loaded lazily to save ~200-400MB RAM at startup.
+// Each one spawns a worker with a full language server; loading all 5 eagerly
+// is the #1 reason for high memory consumption.
+//
+// They are imported dynamically below in `lazyLoadLanguageFeatures()`.
+// To load everything eagerly instead, uncomment the static imports:
+//
+// import '@codingame/monaco-vscode-typescript-language-features-default-extension';
+// import '@codingame/monaco-vscode-json-language-features-default-extension';
+// import '@codingame/monaco-vscode-html-language-features-default-extension';
+// import '@codingame/monaco-vscode-css-language-features-default-extension';
+// import '@codingame/monaco-vscode-markdown-language-features-default-extension';
+// import '@codingame/monaco-vscode-emmet-default-extension';
 
 // Required for vscode extension API usage in plugins
 import 'vscode/localExtensionHost';
@@ -96,6 +99,62 @@ import defaultConfiguration from './user/configuration.json?raw';
 import defaultKeybindings from './user/keybindings.json?raw';
 
 let initialized = false;
+
+// ---------------------------------------------------------------------------
+// Lazy language-feature loader
+//
+// Instead of importing all 5+ language-feature extensions at startup (each
+// one spawns a full language server worker consuming 50-200MB each), we load
+// them on demand when a file of that language is first opened.
+// ---------------------------------------------------------------------------
+
+const languageFeatureLoaders: Record<string, () => Promise<unknown>> = {
+  typescript: () => import('@codingame/monaco-vscode-typescript-language-features-default-extension'),
+  javascript: () => import('@codingame/monaco-vscode-typescript-language-features-default-extension'),
+  typescriptreact: () => import('@codingame/monaco-vscode-typescript-language-features-default-extension'),
+  javascriptreact: () => import('@codingame/monaco-vscode-typescript-language-features-default-extension'),
+  json: () => import('@codingame/monaco-vscode-json-language-features-default-extension'),
+  jsonc: () => import('@codingame/monaco-vscode-json-language-features-default-extension'),
+  html: () => import('@codingame/monaco-vscode-html-language-features-default-extension'),
+  css: () => import('@codingame/monaco-vscode-css-language-features-default-extension'),
+  scss: () => import('@codingame/monaco-vscode-css-language-features-default-extension'),
+  less: () => import('@codingame/monaco-vscode-css-language-features-default-extension'),
+  markdown: () => import('@codingame/monaco-vscode-markdown-language-features-default-extension'),
+};
+
+const loadedFeatures = new Set<string>();
+
+/** Call after Monaco is initialized to start listening for editor opens */
+function setupLazyLanguageFeatures() {
+  // Also load emmet lazily (HTML/CSS toolkit)
+  const emmetLangs = new Set(['html', 'css', 'scss', 'less', 'jsx', 'tsx', 'typescriptreact', 'javascriptreact']);
+  let emmetLoaded = false;
+
+  vscode.workspace.onDidOpenTextDocument((doc) => {
+    const langId = doc.languageId;
+
+    // Load language features
+    const loaderKey = langId;
+    if (languageFeatureLoaders[loaderKey] && !loadedFeatures.has(loaderKey)) {
+      const loader = languageFeatureLoaders[loaderKey];
+      // Mark all aliases as loaded (e.g. typescript & typescriptreact share TS features)
+      for (const [key, val] of Object.entries(languageFeatureLoaders)) {
+        if (val === loader) loadedFeatures.add(key);
+      }
+      loader().then(() => {
+        console.log(`[LazyLoad] Loaded language features for: ${langId}`);
+      });
+    }
+
+    // Load emmet
+    if (!emmetLoaded && emmetLangs.has(langId)) {
+      emmetLoaded = true;
+      import('@codingame/monaco-vscode-emmet-default-extension').then(() => {
+        console.log('[LazyLoad] Loaded emmet');
+      });
+    }
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Fake Worker helper — captures URLs for MonacoEnvironment (matches demo)
@@ -202,7 +261,6 @@ console.log(greet('World'));
 // ---------------------------------------------------------------------------
 
 const commonServices: IEditorOverrideServices = {
-  ...getAuthenticationServiceOverride(),
   ...getLogServiceOverride(),
   ...getExtensionServiceOverride({ enableWorkerExtensionHost: true }),
   ...getModelServiceOverride(),
@@ -213,7 +271,6 @@ const commonServices: IEditorOverrideServices = {
   ...getTextmateServiceOverride(),
   ...getThemeServiceOverride(),
   ...getLanguagesServiceOverride(),
-  ...getDebugServiceOverride(),
   ...getPreferencesServiceOverride(),
   ...getOutlineServiceOverride(),
   ...getBannerServiceOverride(),
@@ -235,8 +292,6 @@ const commonServices: IEditorOverrideServices = {
   ...getEnvironmentServiceOverride(),
   ...getWorkspaceTrustOverride(),
   ...getWorkingCopyServiceOverride(),
-  ...getScmServiceOverride(),
-  ...getTestingServiceOverride(),
   ...getSecretStorageServiceOverride(),
   ...getExplorerServiceOverride(),
   ...getExtensionGalleryServiceOverride({ webOnly: false }),
@@ -350,6 +405,9 @@ export async function initializeMonaco(
     },
     ExtensionHostKind.LocalProcess,
   ).setAsDefaultApi();
+
+  // Start lazy-loading language features when files are opened
+  setupLazyLanguageFeatures();
 
   initialized = true;
 }

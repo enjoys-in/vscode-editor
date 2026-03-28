@@ -20,6 +20,19 @@ const serviceOverrides = codingameDeps.filter(
 export default defineConfig({
   build: {
     target: 'esnext',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split heavy language-feature extensions into separate lazy chunks
+          'lang-typescript': ['@codingame/monaco-vscode-typescript-language-features-default-extension'],
+          'lang-json': ['@codingame/monaco-vscode-json-language-features-default-extension'],
+          'lang-html': ['@codingame/monaco-vscode-html-language-features-default-extension'],
+          'lang-css': ['@codingame/monaco-vscode-css-language-features-default-extension'],
+          'lang-markdown': ['@codingame/monaco-vscode-markdown-language-features-default-extension'],
+          'lang-emmet': ['@codingame/monaco-vscode-emmet-default-extension'],
+        },
+      },
+    },
   },
   resolve: {
     alias: {
