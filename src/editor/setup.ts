@@ -61,6 +61,7 @@ import getOutlineServiceOverride from '@codingame/monaco-vscode-outline-service-
 import getQuickAccessServiceOverride from '@codingame/monaco-vscode-quickaccess-service-override';
 import getWorkbenchServiceOverride from '@codingame/monaco-vscode-workbench-service-override';
 import getExtensionGalleryServiceOverride from '@codingame/monaco-vscode-extension-gallery-service-override';
+import getTerminalServiceOverride from '@codingame/monaco-vscode-terminal-service-override';
 
 // Default extensions (side-effect imports — grammars, themes, icons)
 import '@codingame/monaco-vscode-theme-defaults-default-extension';
@@ -78,6 +79,14 @@ import '@codingame/monaco-vscode-xml-default-extension';
 import '@codingame/monaco-vscode-references-view-default-extension';
 import '@codingame/monaco-vscode-search-result-default-extension';
 import '@codingame/monaco-vscode-configuration-editing-default-extension';
+
+// Language features (intellisense, validation, formatting)
+import '@codingame/monaco-vscode-typescript-language-features-default-extension';
+import '@codingame/monaco-vscode-json-language-features-default-extension';
+import '@codingame/monaco-vscode-html-language-features-default-extension';
+import '@codingame/monaco-vscode-css-language-features-default-extension';
+import '@codingame/monaco-vscode-markdown-language-features-default-extension';
+import '@codingame/monaco-vscode-emmet-default-extension';
 
 // Required for vscode extension API usage in plugins
 import 'vscode/localExtensionHost';
@@ -231,6 +240,7 @@ const commonServices: IEditorOverrideServices = {
   ...getSecretStorageServiceOverride(),
   ...getExplorerServiceOverride(),
   ...getExtensionGalleryServiceOverride({ webOnly: false }),
+  ...getTerminalServiceOverride(),
 };
 
 // ---------------------------------------------------------------------------

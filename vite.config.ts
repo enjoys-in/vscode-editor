@@ -8,6 +8,15 @@ const codingameDeps = Object.keys(pkg.dependencies).filter((d: string) =>
   d.startsWith('@codingame/'),
 );
 
+// Separate heavy default-extension packages — exclude them from optimizeDeps
+// to avoid pre-bundling large WASM/grammars that eat memory
+const defaultExtensions = codingameDeps.filter((d) =>
+  d.includes('-default-extension'),
+);
+const serviceOverrides = codingameDeps.filter(
+  (d) => !d.includes('-default-extension'),
+);
+
 export default defineConfig({
   build: {
     target: 'esnext',
@@ -45,12 +54,14 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: [
-      ...codingameDeps,
+      ...serviceOverrides,
       '@codingame/monaco-vscode-api/extensions',
       '@codingame/monaco-vscode-api/monaco',
+      '@codingame/monaco-vscode-api/workbench',
       'vscode/localExtensionHost',
       '@vscode/vscode-languagedetection',
     ],
+    exclude: defaultExtensions,
     esbuildOptions: {
       plugins: [importMetaUrlPlugin],
     },
