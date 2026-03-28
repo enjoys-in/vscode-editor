@@ -37,6 +37,7 @@
     "@codingame/monaco-vscode-workspace-trust-service-override": "^28.4.1",
     "@codingame/monaco-vscode-remote-agent-service-override": "^28.4.1",
     "@codingame/monaco-vscode-explorer-service-override": "^28.4.1",
+    "@codingame/monaco-vscode-extension-gallery-service-override": "^28.4.1",
     "@codingame/monaco-vscode-preferences-service-override": "^28.4.1",
     "@codingame/monaco-vscode-outline-service-override": "^28.4.1",
     "@codingame/monaco-vscode-authentication-service-override": "^28.4.1",

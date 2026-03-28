@@ -60,6 +60,7 @@ import getExplorerServiceOverride from '@codingame/monaco-vscode-explorer-servic
 import getOutlineServiceOverride from '@codingame/monaco-vscode-outline-service-override';
 import getQuickAccessServiceOverride from '@codingame/monaco-vscode-quickaccess-service-override';
 import getWorkbenchServiceOverride from '@codingame/monaco-vscode-workbench-service-override';
+import getExtensionGalleryServiceOverride from '@codingame/monaco-vscode-extension-gallery-service-override';
 
 // Default extensions (side-effect imports — grammars, themes, icons)
 import '@codingame/monaco-vscode-theme-defaults-default-extension';
@@ -229,6 +230,7 @@ const commonServices: IEditorOverrideServices = {
   ...getTestingServiceOverride(),
   ...getSecretStorageServiceOverride(),
   ...getExplorerServiceOverride(),
+  ...getExtensionGalleryServiceOverride({ webOnly: false }),
 };
 
 // ---------------------------------------------------------------------------
@@ -269,6 +271,13 @@ const constructOptions: IWorkbenchConstructionOptions = {
   productConfiguration: {
     nameShort: 'WebTerminal',
     nameLong: 'WebTerminal Editor',
+    extensionsGallery: {
+      serviceUrl: 'https://open-vsx.org/vscode/gallery',
+      resourceUrlTemplate:
+        'https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/{path}',
+      controlUrl: '',
+      nlsBaseUrl: '',
+    },
   },
 };
 
