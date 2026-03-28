@@ -6,6 +6,7 @@ import { createLSPPlugin } from '@plugins/lsp';
 import { createAICompletionPlugin } from '@plugins/ai-completion';
 import { createKeybindingsPlugin } from '@plugins/keybindings';
 import { createWorkspacePlugin } from '@plugins/workspace';
+import { createAccountPlugin } from '@plugins/account';
 
 async function main() {
   // ---- Create the app ----
@@ -36,6 +37,9 @@ async function main() {
 
   // Workspace — open local folders, upload files, SFTP
   app.registerPlugin(createWorkspacePlugin());
+
+  // Account — login/register + saved SFTP connection profiles
+  app.registerPlugin(createAccountPlugin());
 
   // ---- Example: user-created plugin ----
   // This shows how easy it is for a user to create a plugin using the full
