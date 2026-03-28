@@ -5,6 +5,7 @@ import { createThemePlugin } from '@plugins/theme';
 import { createLSPPlugin } from '@plugins/lsp';
 import { createAICompletionPlugin } from '@plugins/ai-completion';
 import { createKeybindingsPlugin } from '@plugins/keybindings';
+import { createWorkspacePlugin } from '@plugins/workspace';
 
 async function main() {
   // ---- Create the app ----
@@ -32,6 +33,9 @@ async function main() {
 
   // Default keybindings
   app.registerPlugin(createKeybindingsPlugin());
+
+  // Workspace — open local folders, upload files, SFTP
+  app.registerPlugin(createWorkspacePlugin());
 
   // ---- Example: user-created plugin ----
   // This shows how easy it is for a user to create a plugin using the full
