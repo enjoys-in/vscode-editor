@@ -1,0 +1,13 @@
+/* Minimal reset — the VSCode workbench handles all layout */
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+#workbench {
+  height: 100vh;
+  width: 100vw;
+}

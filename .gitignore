@@ -1,0 +1,10 @@
+# Ignore git local config file
+/.git/config
+
+# Ignore git local hooks
+/.git/hooks/*
+
+# Ignore Node.js build artifacts
+/node_modules/
+dist/
+build/
