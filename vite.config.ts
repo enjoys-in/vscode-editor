@@ -1,6 +1,12 @@
 import { defineConfig } from 'vite';
 import path from 'path';
+import fs from 'fs';
 import importMetaUrlPlugin from '@codingame/esbuild-import-meta-url-plugin';
+
+const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf-8'));
+const codingameDeps = Object.keys(pkg.dependencies).filter((d: string) =>
+  d.startsWith('@codingame/'),
+);
 
 export default defineConfig({
   build: {
@@ -14,7 +20,7 @@ export default defineConfig({
       '@modules': path.resolve(__dirname, 'src/modules'),
       '@ui': path.resolve(__dirname, 'src/ui'),
     },
-    dedupe: ['vscode', 'monaco-editor'],
+    dedupe: ['vscode', 'monaco-editor', ...codingameDeps],
   },
   worker: {
     format: 'es',
@@ -39,7 +45,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: [
-      '@codingame/monaco-vscode-api',
+      ...codingameDeps,
       '@codingame/monaco-vscode-api/extensions',
       '@codingame/monaco-vscode-api/monaco',
       'vscode/localExtensionHost',
