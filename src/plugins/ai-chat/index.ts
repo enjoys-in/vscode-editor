@@ -218,6 +218,11 @@ export function createAIChatPlugin(options?: AIChatOptions): Plugin {
 
         // ----- Commands: Add File to Chat -----
 
+        /** Strip virtual FS prefix (e.g. /workspace/) to get clean display path */
+        function cleanPath(p: string): string {
+          return p.replace(/^\/workspace\//, '').replace(/^workspace\//, '');
+        }
+
         disposables.push(
           vscodeApi.commands.registerCommand('aiChat.addFileToChat', async (uri?: any) => {
             // Resolve the file URI — from explorer context or active editor
@@ -231,7 +236,6 @@ export function createAIChatPlugin(options?: AIChatOptions): Plugin {
             }
             try {
               // Check if this is a directory by trying to find files under it
-              const relPath = vscodeApi.workspace.asRelativePath(fileUri);
               const dirPattern = new vscodeApi.RelativePattern(fileUri, '**/*');
               const filesInDir = await vscodeApi.workspace.findFiles(dirPattern, '**/node_modules/**', 50);
 
@@ -241,7 +245,7 @@ export function createAIChatPlugin(options?: AIChatOptions): Plugin {
                 for (const fUri of filesInDir) {
                   try {
                     const doc = await vscodeApi.workspace.openTextDocument(fUri);
-                    const fRel = vscodeApi.workspace.asRelativePath(fUri);
+                    const fRel = cleanPath(vscodeApi.workspace.asRelativePath(fUri));
                     webviewView?.webview.postMessage({
                       type: 'addFileContext',
                       data: { path: fRel, uri: fUri.toString(), content: doc.getText(), language: doc.languageId },
@@ -259,7 +263,7 @@ export function createAIChatPlugin(options?: AIChatOptions): Plugin {
 
               // Single file
               const doc = await vscodeApi.workspace.openTextDocument(fileUri);
-              const rel = vscodeApi.workspace.asRelativePath(fileUri);
+              const rel = cleanPath(vscodeApi.workspace.asRelativePath(fileUri));
               webviewView?.webview.postMessage({
                 type: 'addFileContext',
                 data: { path: rel, uri: fileUri.toString(), content: doc.getText(), language: doc.languageId },
@@ -559,7 +563,7 @@ body{
 .welcome{
   display:flex;flex-direction:column;
   align-items:center;justify-content:center;
-  height:100%;padding:24px 20px;gap:16px;
+  height:100%;padding:24px 20px;
 }
 .welcome-icon{
   font-size:32px;
@@ -768,6 +772,27 @@ body{
   font-family:var(--vscode-editor-font-family,monospace);
 }
 
+/* ===== Loader ===== */
+.loader{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;gap:12px;
+  color:var(--vscode-descriptionForeground,#888);
+  font-size:12px;
+}
+.spinner{
+  width:28px;height:28px;
+  border:3px solid var(--vscode-widget-border,rgba(255,255,255,.1));
+  border-top-color:var(--vscode-activityBarBadge-background,#007acc);
+  border-radius:50%;
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.welcome-content{
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  height:100%;gap:16px;
+}
+
 /* ===== Responsive ===== */
 @media(max-width:360px){
   .msg{padding:10px 12px;gap:8px;}
@@ -779,13 +804,19 @@ body{
 
 <div class="messages" id="messages">
   <div class="welcome" id="welcome">
-    <div class="welcome-icon">\u2728</div>
-    <h3>AI Assistant</h3>
-    <p>Ask me anything about your code. I can explain, refactor, debug, or write new code for you.</p>
-    <div class="hints">
-      <div class="hint" data-q="Explain the currently open file">Explain the current file</div>
-      <div class="hint" data-q="Find potential bugs in this code">Find bugs in my code</div>
-      <div class="hint" data-q="Suggest improvements and refactoring for this code">Suggest improvements</div>
+    <div class="loader" id="loader">
+      <div class="spinner"></div>
+      <span>Connecting to AI...</span>
+    </div>
+    <div class="welcome-content" id="welcome-content" style="display:none">
+      <div class="welcome-icon">\u2728</div>
+      <h3>AI Assistant</h3>
+      <p>Ask me anything about your code. I can explain, refactor, debug, or write new code for you.</p>
+      <div class="hints">
+        <div class="hint" data-q="Explain the currently open file">Explain the current file</div>
+        <div class="hint" data-q="Find potential bugs in this code">Find bugs in my code</div>
+        <div class="hint" data-q="Suggest improvements and refactoring for this code">Suggest improvements</div>
+      </div>
     </div>
   </div>
 </div>
@@ -865,6 +896,11 @@ window.addEventListener('message', (e) => {
   if (msg.type === 'providers') {
     providers = msg.data.filter(p => p.available);
     renderProviders();
+    // Hide loader, show welcome content
+    const loader = document.getElementById('loader');
+    const welcomeContent = document.getElementById('welcome-content');
+    if (loader) loader.style.display = 'none';
+    if (welcomeContent) welcomeContent.style.display = 'flex';
   }
   if (msg.type === 'editorContext') {
     sendChat(msg.data);

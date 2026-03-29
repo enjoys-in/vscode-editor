@@ -122,7 +122,7 @@ function getWorkspaceFolderName(): string {
 }
 
 function getBrandName(): string {
-    const host = new URLSearchParams(window.location.search).get('host');
+    const host = new URLSearchParams(window.location.search).get('host')||new URLSearchParams(window.location.search).get('user');
     return host ? `Terminus — ${host}` : 'Terminus - Powered by Enjoys';
 }
 
