@@ -94,13 +94,22 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
       // Fetch single file via REST
       // -------------------------------------------------------------------
 
+      async function parseApiError(res: Response): Promise<string> {
+        try {
+          const data = await res.json();
+          return data.message || `API error ${res.status}`;
+        } catch {
+          return `API error ${res.status}`;
+        }
+      }
+
       async function fetchFile(filePath: string, sid: string): Promise<string> {
         const res = await fetch(`${apiBase}/api/file/read`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId: sid, path: filePath }),
         });
-        if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+        if (!res.ok) throw new Error(await parseApiError(res));
         const data: ApiResponse = await res.json();
         if (!data.status) throw new Error(data.message || 'File read failed');
         return data.result;
@@ -137,7 +146,7 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sftpSessionId: sid, path: dirPath }),
         });
-        if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+        if (!res.ok) throw new Error(await parseApiError(res));
         const data: FilesApiResponse = await res.json();
         if (!data.status) throw new Error(data.message || 'Directory listing failed');
 
@@ -200,7 +209,7 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId: sid, path: filePath, content }),
         });
-        if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+        if (!res.ok) throw new Error(await parseApiError(res));
         const data: ApiResponse = await res.json();
         if (!data.status) throw new Error(data.message || 'File write failed');
       }
