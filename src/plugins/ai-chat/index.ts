@@ -230,14 +230,40 @@ export function createAIChatPlugin(options?: AIChatOptions): Plugin {
               return;
             }
             try {
+              // Check if this is a directory by trying to find files under it
+              const relPath = vscodeApi.workspace.asRelativePath(fileUri);
+              const dirPattern = new vscodeApi.RelativePattern(fileUri, '**/*');
+              const filesInDir = await vscodeApi.workspace.findFiles(dirPattern, '**/node_modules/**', 50);
+
+              if (filesInDir.length > 0) {
+                // It's a directory — add all files under it
+                let added = 0;
+                for (const fUri of filesInDir) {
+                  try {
+                    const doc = await vscodeApi.workspace.openTextDocument(fUri);
+                    const fRel = vscodeApi.workspace.asRelativePath(fUri);
+                    webviewView?.webview.postMessage({
+                      type: 'addFileContext',
+                      data: { path: fRel, uri: fUri.toString(), content: doc.getText(), language: doc.languageId },
+                    });
+                    added++;
+                  } catch { /* skip binary/unreadable files */ }
+                }
+                if (added > 0) {
+                  await vscodeApi.commands.executeCommand('ai-chat-view.focus');
+                } else {
+                  vscodeApi.window.showWarningMessage('No readable files found in directory.');
+                }
+                return;
+              }
+
+              // Single file
               const doc = await vscodeApi.workspace.openTextDocument(fileUri);
               const rel = vscodeApi.workspace.asRelativePath(fileUri);
-              // Post to webview to add as context chip
               webviewView?.webview.postMessage({
                 type: 'addFileContext',
                 data: { path: rel, uri: fileUri.toString(), content: doc.getText(), language: doc.languageId },
               });
-              // Focus the chat panel
               await vscodeApi.commands.executeCommand('ai-chat-view.focus');
             } catch (err: any) {
               vscodeApi.window.showErrorMessage(`Cannot read file: ${err.message}`);

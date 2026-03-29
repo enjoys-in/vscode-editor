@@ -108,10 +108,14 @@ function getWorkspaceFolderName(): string {
     try {
         const remotePath = new URLSearchParams(window.location.search).get('path');
         if (remotePath) {
-            // Use last non-empty segment of the remote path
-            const segments = remotePath.replace(/\/+$/, '').split('/');
-            const last = segments.filter(Boolean).pop();
-            if (last) return last;
+            const segments = remotePath.replace(/\/+$/, '').split('/').filter(Boolean);
+            if (segments.length === 0) return 'workspace';
+            const last = segments[segments.length - 1];
+            // If path points to a file (has extension), use parent directory name
+            if (last.includes('.') && !last.startsWith('.')) {
+                return segments.length >= 2 ? segments[segments.length - 2] : 'workspace';
+            }
+            return last;
         }
     } catch { /* ignore */ }
     return 'workspace';
@@ -162,7 +166,7 @@ function setupFileSystem() {
 const minimalServices: IEditorOverrideServices = {
     ...getLogServiceOverride(),
     ...getFilesServiceOverride(),
-    ...getExtensionServiceOverride({ enableWorkerExtensionHost: false }),
+    ...getExtensionServiceOverride({ enableWorkerExtensionHost: false, }),
     ...getModelServiceOverride(),
     ...getNotificationsServiceOverride(),
     ...getDialogsServiceOverride(),
