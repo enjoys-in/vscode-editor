@@ -3,8 +3,17 @@ import { MinimalApp } from './app';
 import { createWorkspacePlugin } from '@plugins/workspace';
 import { createAICompletionPlugin } from '@plugins/ai-completion';
 import { createAccountPlugin } from '@plugins/account';
+import { createApiFileReaderPlugin } from './api-file-reader';
+
+// If this page was loaded as an extension host worker iframe, don't boot the app.
+// The 'vscode/localExtensionHost' import (in setup.ts) handles the worker case.
+const searchParams = new URLSearchParams(window.location.search);
+if (searchParams.has('vscodeWebWorkerExtHostId')) {
+  // Extension host worker — nothing to do
+} else {
 
 async function main() {
+  console.log('[Minimal] Starting...', Date.now());
   const app = new MinimalApp({
     container: '#workbench',
   });
@@ -23,9 +32,18 @@ async function main() {
   // Account — SFTP sidebar panel + saved connection profiles
   app.registerPlugin(createAccountPlugin());
 
+  // API File Reader — loads files from POST /api/file/read
+  // Uses URL query params: ?path=/remote/dir&sessionId=sftp_xxx
+  app.registerPlugin(createApiFileReaderPlugin());
+
   await app.boot();
+  console.log('[Minimal] Boot complete, all plugins activated');
 
   (window as any).app = app;
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  console.error('[Minimal] Boot failed:', err);
+});
+
+} // end of else (not extension host worker)

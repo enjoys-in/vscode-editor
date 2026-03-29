@@ -17,7 +17,7 @@ import getConfigurationServiceOverride, {
 import getKeybindingsServiceOverride, {
   initUserKeybindings,
 } from '@codingame/monaco-vscode-keybindings-service-override';
-import {
+import getFilesServiceOverride, {
   RegisteredFileSystemProvider,
   RegisteredMemoryFile,
   registerFileSystemOverlay,
@@ -59,6 +59,9 @@ import getQuickAccessServiceOverride from '@codingame/monaco-vscode-quickaccess-
 import getWorkbenchServiceOverride from '@codingame/monaco-vscode-workbench-service-override';
 import getExtensionGalleryServiceOverride from '@codingame/monaco-vscode-extension-gallery-service-override';
 import getTerminalServiceOverride from '@codingame/monaco-vscode-terminal-service-override';
+// import getViewsServiceOverride from '@codingame/monaco-vscode-views-service-override';
+import getChatServiceOverride from '@codingame/monaco-vscode-chat-service-override';
+import getAiServiceOverride from '@codingame/monaco-vscode-ai-service-override';
 
 // Default extensions (side-effect imports — grammars, themes, icons)
 import '@codingame/monaco-vscode-theme-defaults-default-extension';
@@ -262,6 +265,7 @@ console.log(greet('World'));
 
 const commonServices: IEditorOverrideServices = {
   ...getLogServiceOverride(),
+  ...getFilesServiceOverride(),
   ...getExtensionServiceOverride({ enableWorkerExtensionHost: true }),
   ...getModelServiceOverride(),
   ...getNotificationsServiceOverride(),
@@ -293,9 +297,13 @@ const commonServices: IEditorOverrideServices = {
   ...getWorkspaceTrustOverride(),
   ...getWorkingCopyServiceOverride(),
   ...getSecretStorageServiceOverride(),
+  ...getAuthenticationServiceOverride(),
   ...getExplorerServiceOverride(),
   ...getExtensionGalleryServiceOverride({ webOnly: false }),
   ...getTerminalServiceOverride(),
+  // ...getViewsServiceOverride(),
+  ...getChatServiceOverride(),
+  ...getAiServiceOverride(),
 };
 
 // ---------------------------------------------------------------------------
@@ -340,6 +348,8 @@ const constructOptions: IWorkbenchConstructionOptions = {
       serviceUrl: 'https://open-vsx.org/vscode/gallery',
       resourceUrlTemplate:
         'https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/{path}',
+      extensionUrlTemplate:
+        'https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest',
       controlUrl: '',
       nlsBaseUrl: '',
     },

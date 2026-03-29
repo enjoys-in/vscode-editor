@@ -17,10 +17,21 @@ const serviceOverrides = codingameDeps.filter(
   (d) => !d.includes('-default-extension'),
 );
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const inputMap: Record<string, Record<string, string>> = {
+    full: { main: path.resolve(__dirname, 'index.html') },
+    minimal: { minimal: path.resolve(__dirname, 'minimal.html') },
+  };
+  const input = inputMap[mode] ?? {
+    main: path.resolve(__dirname, 'index.html'),
+    minimal: path.resolve(__dirname, 'minimal.html'),
+  };
+
+  return {
   build: {
     target: 'esnext',
     rollupOptions: {
+      input,
       output: {
         manualChunks: {
           // Split heavy language-feature extensions into separate lazy chunks
@@ -38,6 +49,7 @@ export default defineConfig({
     alias: {
       '@core': path.resolve(__dirname, 'src/core'),
       '@editor': path.resolve(__dirname, 'src/editor'),
+      '@minimal': path.resolve(__dirname, 'src/minimal'),
       '@plugins': path.resolve(__dirname, 'src/plugins'),
       '@modules': path.resolve(__dirname, 'src/modules'),
       '@ui': path.resolve(__dirname, 'src/ui'),
@@ -86,4 +98,5 @@ export default defineConfig({
       allow: ['../'],
     },
   },
+};
 });

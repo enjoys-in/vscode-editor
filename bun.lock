@@ -6,8 +6,10 @@
       "name": "webterminal-editor",
       "dependencies": {
         "@codingame/monaco-vscode-accessibility-service-override": "^28.4.1",
+        "@codingame/monaco-vscode-ai-service-override": "^28.4.1",
         "@codingame/monaco-vscode-api": "^28.4.1",
         "@codingame/monaco-vscode-authentication-service-override": "^28.4.1",
+        "@codingame/monaco-vscode-chat-service-override": "^28.4.1",
         "@codingame/monaco-vscode-configuration-editing-default-extension": "^28.4.1",
         "@codingame/monaco-vscode-configuration-service-override": "^28.4.1",
         "@codingame/monaco-vscode-css-default-extension": "^28.4.1",
@@ -57,6 +59,7 @@
         "@codingame/monaco-vscode-view-banner-service-override": "^28.4.1",
         "@codingame/monaco-vscode-view-status-bar-service-override": "^28.4.1",
         "@codingame/monaco-vscode-view-title-bar-service-override": "^28.4.1",
+        "@codingame/monaco-vscode-views-service-override": "^28.4.1",
         "@codingame/monaco-vscode-workbench-service-override": "^28.4.1",
         "@codingame/monaco-vscode-working-copy-service-override": "^28.4.1",
         "@codingame/monaco-vscode-workspace-trust-service-override": "^28.4.1",
@@ -79,6 +82,8 @@
 
     "@codingame/monaco-vscode-accessibility-service-override": ["@codingame/monaco-vscode-accessibility-service-override@28.4.1", "", { "dependencies": { "@codingame/monaco-vscode-api": "28.4.1", "marked": "14.0.0" } }, "sha512-bOI/wfuJi+QZuPx22sT19hC/fHC+fV5OjboweTZkOf5E/s3kMED4L4Vxt8VStkK42vEsArp9ikAkAkptyhqqHQ=="],
 
+    "@codingame/monaco-vscode-ai-service-override": ["@codingame/monaco-vscode-ai-service-override@28.4.1", "", { "dependencies": { "@codingame/monaco-vscode-api": "28.4.1" } }, "sha512-AHOfLjHuGEb216Kgzy4YGtQFKZqZaCgmOfZcvLMY3/Hmbf1I7SJl0s4o3NMGmsP/PSZw9pIptw/jWnKytEGhmw=="],
+
     "@codingame/monaco-vscode-api": ["@codingame/monaco-vscode-api@28.4.1", "", { "dependencies": { "@codingame/monaco-vscode-base-service-override": "28.4.1", "@codingame/monaco-vscode-environment-service-override": "28.4.1", "@codingame/monaco-vscode-extensions-service-override": "28.4.1", "@codingame/monaco-vscode-files-service-override": "28.4.1", "@codingame/monaco-vscode-host-service-override": "28.4.1", "@codingame/monaco-vscode-layout-service-override": "28.4.1", "@codingame/monaco-vscode-quickaccess-service-override": "28.4.1", "@vscode/iconv-lite-umd": "0.7.1", "dompurify": "3.3.3", "jschardet": "3.1.4", "marked": "14.0.0" } }, "sha512-j4D/Hd/xWV8AUYCz9zpYEkf4sa2YM03ss8ncspsa6aaKqhVe/rvyw77wobcoaecucNKEw2NS/tZyfzXGlFRHug=="],
 
     "@codingame/monaco-vscode-authentication-service-override": ["@codingame/monaco-vscode-authentication-service-override@28.4.1", "", { "dependencies": { "@codingame/monaco-vscode-api": "28.4.1" } }, "sha512-nsEwXQli9fZrLuef8ROikFX5EHqfg/2DPKy2Zl7XazqTGzG+Cb7tLgJ3u6DMjJIKxr8oHFjf+BnPKXOFIl9kQQ=="],
@@ -86,6 +91,8 @@
     "@codingame/monaco-vscode-base-service-override": ["@codingame/monaco-vscode-base-service-override@28.4.1", "", { "dependencies": { "@codingame/monaco-vscode-api": "28.4.1" } }, "sha512-7+3nNhp0ClEiaMKzA/cKsgsFgsU2iD+2EFhiYxdggp47uD9H+vKpsc+zUvP/4AbjpoRgATGlVpcHUWlghzdyrQ=="],
 
     "@codingame/monaco-vscode-bulk-edit-service-override": ["@codingame/monaco-vscode-bulk-edit-service-override@28.4.1", "", { "dependencies": { "@codingame/monaco-vscode-api": "28.4.1" } }, "sha512-3hDL4Wc9Q+MAHayoHq95oFddnLcm+5oFXwqNzkZSsrWmDAiNg4Ky6wUGdjnEQz7g7RF3AhsV+TJd77jgq3uCOg=="],
+
+    "@codingame/monaco-vscode-chat-service-override": ["@codingame/monaco-vscode-chat-service-override@28.4.1", "", { "dependencies": { "@codingame/monaco-vscode-api": "28.4.1", "@codingame/monaco-vscode-katex-common": "28.4.1", "@codingame/monaco-vscode-xterm-addons-common": "28.4.1", "@codingame/monaco-vscode-xterm-common": "28.4.1" } }, "sha512-u2wAYlX/xgsnGDljyRvDbnbALHDCBuOfkzwMgu46ioegwfrAVq+dGYZvrAez99aqgKaXuK12M7bLtGGyrQ1ezw=="],
 
     "@codingame/monaco-vscode-configuration-editing-default-extension": ["@codingame/monaco-vscode-configuration-editing-default-extension@28.4.1", "", { "dependencies": { "@codingame/monaco-vscode-api": "28.4.1" } }, "sha512-2W5apoCBk8C8miduboAfMyxyn+iIrM/F327+WMKyvLYo7UfMEa6YHC06rtuWpWmBXPJAxWroomlejoUgIudH2g=="],
 
@@ -120,6 +127,8 @@
     "@codingame/monaco-vscode-json-default-extension": ["@codingame/monaco-vscode-json-default-extension@28.4.1", "", { "dependencies": { "@codingame/monaco-vscode-api": "28.4.1" } }, "sha512-tWHl6ibSWgdiwzT/xQBxrxu3K7pTUTWCi9011msNqtVK/h5/3YPEZZmP6UrB7cEUJlic/cDi1AJGqhyqRpMYEQ=="],
 
     "@codingame/monaco-vscode-json-language-features-default-extension": ["@codingame/monaco-vscode-json-language-features-default-extension@28.4.1", "", { "dependencies": { "@codingame/monaco-vscode-api": "28.4.1" } }, "sha512-A/Y7Fb/HOTSeqEfs2lrIeexna1ykboqgAhxCLzxjxHw1wXslj2Vx2NJDYXtFbflgX4Xp3bDP8TGS2/1XK8DBqQ=="],
+
+    "@codingame/monaco-vscode-katex-common": ["@codingame/monaco-vscode-katex-common@28.4.1", "", { "dependencies": { "@codingame/monaco-vscode-api": "28.4.1", "katex": "0.16.27", "marked": "14.0.0" } }, "sha512-IgQ+mCrLhCGdFhLjnJblx5iG1kTz/xkU5reDl1HlNvYdyt6dbCgIC7sT5Kc5MhTYdjYD8Qf3LjIiumMHrzhYHQ=="],
 
     "@codingame/monaco-vscode-keybindings-service-override": ["@codingame/monaco-vscode-keybindings-service-override@28.4.1", "", { "dependencies": { "@codingame/monaco-vscode-api": "28.4.1", "@codingame/monaco-vscode-files-service-override": "28.4.1" } }, "sha512-3aHMncxPZrpdNbd6wLZXWQuAbq2JNocxxkSMMscTXIWSoE1gHuJfMwjUdIMGHKgxsIj19dOfyP5No9v5pZJ6vA=="],
 
@@ -190,6 +199,8 @@
     "@codingame/monaco-vscode-view-status-bar-service-override": ["@codingame/monaco-vscode-view-status-bar-service-override@28.4.1", "", { "dependencies": { "@codingame/monaco-vscode-api": "28.4.1" } }, "sha512-8M8wyNXOh4ycIuCDxTJOml+lpbmCyI6XXu+dnVZtivq4x2Jk1KYXpWlLSjPun5/zy9kqbjgk+CQIIoj7GRDZPQ=="],
 
     "@codingame/monaco-vscode-view-title-bar-service-override": ["@codingame/monaco-vscode-view-title-bar-service-override@28.4.1", "", { "dependencies": { "@codingame/monaco-vscode-api": "28.4.1" } }, "sha512-KOHw0i+mDclvYtYZNzatBcXhM15ArJZfd23VSYMYUwvZ9sgECRNXF88mg+iOgt08hmlO5um2c53scSrSuKqlzw=="],
+
+    "@codingame/monaco-vscode-views-service-override": ["@codingame/monaco-vscode-views-service-override@28.4.1", "", { "dependencies": { "@codingame/monaco-vscode-api": "28.4.1", "@codingame/monaco-vscode-keybindings-service-override": "28.4.1", "@codingame/monaco-vscode-layout-service-override": "28.4.1", "@codingame/monaco-vscode-quickaccess-service-override": "28.4.1", "@codingame/monaco-vscode-view-common-service-override": "28.4.1" } }, "sha512-a7eiFA4OzkmYYNrSr5m0VuwEFxDLzcfFNFw0RLGaFVDpUj1/EYLLw6FkJFxLTcFmqgaeo99DGnYRxhYn1By3tQ=="],
 
     "@codingame/monaco-vscode-workbench-service-override": ["@codingame/monaco-vscode-workbench-service-override@28.4.1", "", { "dependencies": { "@codingame/monaco-vscode-api": "28.4.1", "@codingame/monaco-vscode-keybindings-service-override": "28.4.1", "@codingame/monaco-vscode-quickaccess-service-override": "28.4.1", "@codingame/monaco-vscode-view-banner-service-override": "28.4.1", "@codingame/monaco-vscode-view-common-service-override": "28.4.1", "@codingame/monaco-vscode-view-status-bar-service-override": "28.4.1", "@codingame/monaco-vscode-view-title-bar-service-override": "28.4.1" } }, "sha512-1sd/s+36X3KQXiR0mGNq2MT3z1fyB6DdnsQpbeEiWiA0Yo7+z48Xeiaga2yXv5y1XVTTBrlBcu7E7FVX+q9csA=="],
 
@@ -339,6 +350,8 @@
 
     "brace-expansion": ["brace-expansion@2.0.3", "", { "dependencies": { "balanced-match": "^1.0.0" } }, "sha512-MCV/fYJEbqx68aE58kv2cA/kiky1G8vux3OR6/jbS+jIMe/6fJWa0DTzJU7dqijOWYwHi1t29FlfYI9uytqlpA=="],
 
+    "commander": ["commander@8.3.0", "", {}, "sha512-OkTL9umf+He2DZkUq8f8J9of7yL6RJKI24dVITBmNfZBmri9zYZQrKkuXiKhyfPSu8tUhnVBB1iKXevvnlR4Ww=="],
+
     "dompurify": ["dompurify@3.3.3", "", { "optionalDependencies": { "@types/trusted-types": "^2.0.7" } }, "sha512-Oj6pzI2+RqBfFG+qOaOLbFXLQ90ARpcGG6UePL82bJLtdsa6CYJD7nmiU8MW9nQNOtCHV3lZ/Bzq1X0QYbBZCA=="],
 
     "esbuild": ["esbuild@0.25.12", "", { "optionalDependencies": { "@esbuild/aix-ppc64": "0.25.12", "@esbuild/android-arm": "0.25.12", "@esbuild/android-arm64": "0.25.12", "@esbuild/android-x64": "0.25.12", "@esbuild/darwin-arm64": "0.25.12", "@esbuild/darwin-x64": "0.25.12", "@esbuild/freebsd-arm64": "0.25.12", "@esbuild/freebsd-x64": "0.25.12", "@esbuild/linux-arm": "0.25.12", "@esbuild/linux-arm64": "0.25.12", "@esbuild/linux-ia32": "0.25.12", "@esbuild/linux-loong64": "0.25.12", "@esbuild/linux-mips64el": "0.25.12", "@esbuild/linux-ppc64": "0.25.12", "@esbuild/linux-riscv64": "0.25.12", "@esbuild/linux-s390x": "0.25.12", "@esbuild/linux-x64": "0.25.12", "@esbuild/netbsd-arm64": "0.25.12", "@esbuild/netbsd-x64": "0.25.12", "@esbuild/openbsd-arm64": "0.25.12", "@esbuild/openbsd-x64": "0.25.12", "@esbuild/openharmony-arm64": "0.25.12", "@esbuild/sunos-x64": "0.25.12", "@esbuild/win32-arm64": "0.25.12", "@esbuild/win32-ia32": "0.25.12", "@esbuild/win32-x64": "0.25.12" }, "bin": { "esbuild": "bin/esbuild" } }, "sha512-bbPBYYrtZbkt6Os6FiTLCTFxvq4tt3JKall1vRwshA3fdVztsLAatFaZobhkBC8/BrPetoa0oksYoKXoG4ryJg=="],
@@ -352,6 +365,8 @@
     "js-base64": ["js-base64@3.7.8", "", {}, "sha512-hNngCeKxIUQiEUN3GPJOkz4wF/YvdUdbNL9hsBcMQTkKzboD7T/q3OYOuuPZLUE6dBxSGpwhk5mwuDud7JVAow=="],
 
     "jschardet": ["jschardet@3.1.4", "", {}, "sha512-/kmVISmrwVwtyYU40iQUOp3SUPk2dhNCMsZBQX0R1/jZ8maaXJ/oZIzUOiyOqcgtLnETFKYChbJ5iDC/eWmFHg=="],
+
+    "katex": ["katex@0.16.27", "", { "dependencies": { "commander": "^8.3.0" }, "bin": { "katex": "cli.js" } }, "sha512-aeQoDkuRWSqQN6nSvVCEFvfXdqo1OQiCmmW1kc9xSdjutPv7BGO7pqY9sQRJpMOGrEdfDgF2TfRXe5eUAD2Waw=="],
 
     "lru-cache": ["lru-cache@6.0.0", "", { "dependencies": { "yallist": "^4.0.0" } }, "sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA=="],
 

@@ -200,15 +200,6 @@ const constructOptions: IWorkbenchConstructionOptions = {
   productConfiguration: {
     nameShort: 'WebTerminal',
     nameLong: 'WebTerminal Minimal',
-    extensionsGallery: {
-      serviceUrl: 'https://open-vsx.org/vscode/gallery',
-      resourceUrlTemplate:
-        'https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/{path}',
-      extensionUrlTemplate:
-        'https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest',
-      controlUrl: '',
-      nlsBaseUrl: '',
-    },
   },
   workspaceProvider: {
     trusted: true,
@@ -264,12 +255,14 @@ export async function initializeMonaco(
     }),
   };
 
+  console.log('[Minimal Setup] Calling initializeMonacoService...');
   await initializeMonacoService(
     services,
     options.container,
     constructOptions,
     envOptions,
   );
+  console.log('[Minimal Setup] initializeMonacoService resolved');
 
   await registerExtension(
     {

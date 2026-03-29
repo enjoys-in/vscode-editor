@@ -47,11 +47,13 @@ export class MinimalApp {
         ? document.querySelector<HTMLElement>(this.options.container)!
         : this.options.container ?? document.getElementById('workbench')!;
 
+    console.log('[MinimalApp] Before initializeMonaco');
     await initializeMonaco({
       container: containerEl,
       userConfiguration: this.options.userConfiguration,
       userKeybindings: this.options.userKeybindings,
     });
+    console.log('[MinimalApp] After initializeMonaco');
 
     this.services.register('events', this.events);
     this.services.register('commands', this.commands);
@@ -61,9 +63,11 @@ export class MinimalApp {
       events: this.events,
     };
     await this.modules.initAll(moduleCtx);
+    console.log('[MinimalApp] Modules initialized');
 
     const pluginCtx = this.buildPluginContext();
     await this.plugins.activateAll(pluginCtx);
+    console.log('[MinimalApp] Plugins activated');
 
     this.events.emit('editor:ready', undefined);
   }
