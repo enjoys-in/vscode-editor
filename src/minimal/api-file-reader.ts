@@ -242,6 +242,10 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
             e.waitUntil(
               saveFile(remoteFilePath, sessionId, doc.getText())
                 .then(() => {
+                  const fileName = remoteFilePath.split('/').pop() || 'file';
+                  const now = new Date();
+                  const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                  ctx.vscode.window.setStatusBarMessage(`$(check) ${fileName} saved at ${time}`, 5000);
                   console.log('[ApiFileReader] Saved:', remoteFilePath);
                   return [] as any;
                 })

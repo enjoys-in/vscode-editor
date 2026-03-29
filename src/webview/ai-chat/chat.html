@@ -1,0 +1,46 @@
+<div class="messages" id="messages">
+  <div class="welcome" id="welcome">
+    <div class="loader" id="loader">
+      <div class="spinner"></div>
+      <span>Connecting to AI...</span>
+    </div>
+    <div class="welcome-content" id="welcome-content" style="display:none">
+      <div class="welcome-icon">&#x2728;</div>
+      <h3>AI Assistant</h3>
+      <p>Ask me anything about your code. I can explain, refactor, debug, or write new code for you.</p>
+      <div class="hints">
+        <div class="hint" data-q="Explain the currently open file">Explain the current file</div>
+        <div class="hint" data-q="Find potential bugs in this code">Find bugs in my code</div>
+        <div class="hint" data-q="Suggest improvements and refactoring for this code">Suggest improvements</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="context-chips" id="context-chips"></div>
+
+<div class="input-wrap">
+  <div class="file-dropdown" id="file-dropdown"></div>
+  <div class="input-box">
+    <textarea id="input" rows="1" placeholder="Ask anything... (@ to attach file, Shift+Enter for newline)"></textarea>
+    <div class="input-toolbar">
+      <div class="left">
+        <div class="model-chip" title="Select provider">
+          <span>&#x26A1;</span>
+          <select id="provider-select"><option>...</option></select>
+        </div>
+        <div class="model-chip" title="Select model">
+          <span>&#x1F9E0;</span>
+          <select id="model-select"><option>...</option></select>
+        </div>
+      </div>
+      <div class="right">
+        <button class="tool-btn" id="clear-btn" title="New chat">&#x1F5D1;</button>
+        <button class="send-btn" id="send-btn">
+          <span id="send-icon">&#x25B6;</span>
+          <span id="send-label">Send</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

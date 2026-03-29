@@ -166,7 +166,7 @@ function setupFileSystem() {
 const minimalServices: IEditorOverrideServices = {
     ...getLogServiceOverride(),
     ...getFilesServiceOverride(),
-    ...getExtensionServiceOverride({ enableWorkerExtensionHost: false, }),
+    ...getExtensionServiceOverride({ enableWorkerExtensionHost: false }),
     ...getModelServiceOverride(),
     ...getNotificationsServiceOverride(),
     ...getDialogsServiceOverride(),
@@ -193,7 +193,7 @@ const minimalServices: IEditorOverrideServices = {
     ...getRemoteAgentServiceOverride({ scanRemoteExtensions: false }),
     ...getSecretStorageServiceOverride(),
     ...getAuthenticationServiceOverride(),
-    ...getExtensionGalleryServiceOverride({ webOnly: false }),
+    ...getExtensionGalleryServiceOverride({ webOnly: false, }),
     // ...getViewsServiceOverride(),
 
    
