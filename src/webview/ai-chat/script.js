@@ -380,10 +380,10 @@ async function streamResponse(question, ctx, files) {
       signal: abortController.signal,
       body: JSON.stringify({
         question,
-        language: ctx.language,
+        language: ctx.language || 'plaintext',
         fileName: ctx.fileName || '',
-        context: ctx.context.slice(0, 4000),
-        selection: ctx.selection.slice(0, 2000),
+        context: (ctx.context || '').slice(0, 4000),
+        selection: (ctx.selection || '').slice(0, 2000),
         fileContext,
         providerId: selectedProviderId,
         modelId: selectedModelId,
