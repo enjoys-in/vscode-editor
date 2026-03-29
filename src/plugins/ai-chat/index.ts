@@ -243,7 +243,10 @@ export function createAIChatPlugin(options?: AIChatOptions): Plugin {
                     webviewView.webview.postMessage({ type: 'applyResult', applyId: msg.applyId, success: false });
                   }
                 } catch (err: any) {
-                  vscodeApi.window.showErrorMessage(`Diff failed: ${err.message}`);
+                  // Ignore user-canceled actions (navigating away from diff, dismissing notification)
+                  if (err?.message !== 'Canceled' && err?.name !== 'Canceled') {
+                    vscodeApi.window.showErrorMessage(`Diff failed: ${err.message}`);
+                  }
                   webviewView.webview.postMessage({ type: 'applyResult', applyId: msg.applyId, success: false });
                 }
               }
