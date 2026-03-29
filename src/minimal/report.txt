@@ -1,0 +1,966 @@
+================================================================================
+  SFTP MODULE — FRONTEND INTEGRATION AUDIT REPORT
+  Project  : terminus-web-backend
+  Date     : 2026-03-29
+  Author   : Auto-generated
+================================================================================
+
+TABLE OF CONTENTS
+─────────────────
+  1. Overview & Architecture
+  2. Connection Setup (Libraries & Transport)
+  3. Socket.IO Namespace & Handshake
+  4. Event Catalog — Client → Server  (all events with payloads)
+  5. Event Catalog — Server → Client  (all events with payloads)
+  6. REST / HTTP Endpoints (file upload, download, read, write)
+  7. Progress & Abort Events (upload/download lifecycle)
+  8. Type Definitions & Interfaces
+  9. Authentication Flow
+ 10. Error Handling Pattern
+ 11. Quick-Start Code Snippets for Frontend
+
+================================================================================
+1. OVERVIEW & ARCHITECTURE
+================================================================================
+
+The SFTP subsystem provides a full remote file-management experience over
+Socket.IO (real-time events) + REST (binary upload/download). Each browser
+tab / SFTP panel gets its OWN SFTPClient instance — multiple panels to the
+same or different hosts can run simultaneously.
+
+  ┌─────────────┐       Socket.IO /sftp        ┌──────────────────────┐
+  │   Frontend   │ ◄══════════════════════════► │   SFTPNamespace      │
+  │  (browser)   │                              │   (per-socket class) │
+  │              │       REST  /api/*           │                      │
+  │              │ ◄───────────────────────────►│   SFTPController     │
+  └─────────────┘                              └──────────┬───────────┘
+                                                          │
+                                                 ┌────────▼────────┐
+                                                 │   Sftp_Service   │
+                                                 │  (session map)   │
+                                                 │  ssh2-sftp-client│
+                                                 └────────┬────────┘
+                                                          │
+                                                 ┌────────▼────────┐
+                                                 │  Remote SSH/SFTP │
+                                                 │  Server          │
+                                                 └─────────────────┘
+
+================================================================================
+2. CONNECTION SETUP — LIBRARIES & TRANSPORT
+================================================================================
+
+Backend Library        : ssh2-sftp-client  v11.0.0  (wraps ssh2 v1.16.0)
+Real-Time Transport    : socket.io         v4.8.0
+HTTP Framework         : express           v4.21.1
+File Upload Middleware : express-fileupload v1.5.1
+Progress Tracking      : progress-stream   v2.0.0
+Zip Handling           : adm-zip v0.5.16, archiver v7.0.1
+State Store            : Redis (via redis v4.7.0)
+Socket.IO Adapter      : @socket.io/redis-adapter v8.3.0
+
+The underlying SSH connection is made via the `ssh2` module.
+`ssh2-sftp-client` wraps it into a promise-based SFTP API.
+
+================================================================================
+3. SOCKET.IO NAMESPACE & HANDSHAKE
+================================================================================
+
+Namespace  : /sftp
+URL        : ws://<host>:<port>/sftp
+
+Handshake Query Parameters (sent by client on connect):
+┌──────────────────┬──────────┬──────────────────────────────────────────────┐
+│ Parameter        │ Required │ Description                                  │
+├──────────────────┼──────────┼──────────────────────────────────────────────┤
+│ sessionId        │ Yes      │ Main terminal/SSH session ID from backend.   │
+│                  │          │ Used to look up saved credentials in Redis.  │
+├──────────────────┼──────────┼──────────────────────────────────────────────┤
+│ sftpSessionId    │ No       │ Client-generated UUID for this SFTP panel.   │
+│                  │          │ Falls back to sessionId if omitted.          │
+│                  │          │ Uniquely identifies each SFTP tab/panel.     │
+└──────────────────┴──────────┴──────────────────────────────────────────────┘
+
+Frontend Connect Example:
+
+  import { io } from "socket.io-client";
+
+  const sftpSocket = io("http://localhost:3000/sftp", {
+    query: {
+      sessionId: "abc-123",
+      sftpSessionId: crypto.randomUUID(),
+    },
+  });
+
+================================================================================
+4. EVENT CATALOG — CLIENT → SERVER
+================================================================================
+
+All event names are prefixed with @@. The enum is SocketEventConstants.
+
+────────────────────────────────────────────────────────────────────────────────
+4.1  @@SFTP_CONNECT  —  Establish SFTP connection
+────────────────────────────────────────────────────────────────────────────────
+  Payload (object OR JSON string):
+  {
+    host: string,              // e.g. "192.168.1.10"
+    port?: number,             // default 22
+    username: string,          // e.g. "root"
+    authMethod: "password" | "privateKey",
+    password?: string,         // required if authMethod === "password"
+    privateKeyText?: string    // required if authMethod === "privateKey"
+  }
+
+  If payload is empty/missing, server falls back to Redis-stored credentials
+  from the main SSH session (key: `sftp:<sessionId>`).
+
+  Server Response Events:
+    @@SFTP_READY           → true
+    @@SFTP_FILES_LIST      → { files: string (JSON), currentDir: string }
+    @@SFTP_CURRENT_PATH    → string (initial cwd)
+    @@SFTP_EMIT_ERROR      → string (on failure)
+
+────────────────────────────────────────────────────────────────────────────────
+4.2  @@SFTP_GET_FILE  —  List directory contents
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    dirPath?: string   // absolute remote path. If omitted, uses server cwd.
+  }
+
+  Server Response:
+    @@SFTP_FILES_LIST → {
+      files: string,       // JSON-stringified array of SFTP_FILES_LIST[]
+      currentDir: string   // the listed directory path
+    }
+
+  On error:
+    @@ERROR → "Error fetching files: <message>"
+
+────────────────────────────────────────────────────────────────────────────────
+4.3  @@SFTP_RENAME_FILE  —  Rename a file or directory
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    oldPath: string,   // current full remote path
+    newPath: string    // new full remote path
+  }
+
+  Server Response:
+    @@SUCCESS → "File renamed successfully"
+  On error:
+    @@ERROR   → "Error renaming file: <message>"
+
+────────────────────────────────────────────────────────────────────────────────
+4.4  @@SFTP_MOVE_FILE  —  Move a file or directory
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    oldPath: string,   // source full remote path
+    newPath: string    // destination full remote path
+  }
+
+  Server Response:
+    @@SUCCESS → "File moved successfully"
+  On error:
+    @@ERROR   → "Error moving file: <message>"
+
+────────────────────────────────────────────────────────────────────────────────
+4.5  @@SFTP_COPY_FILE  —  Copy a file or directory (recursive)
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    currentPath: string,       // source remote path
+    destinationPath: string    // destination remote path
+  }
+
+  Server Response:
+    @@SUCCESS → "File copied successfully"
+  On error:
+    @@ERROR   → "Error copying file: <message>"
+
+────────────────────────────────────────────────────────────────────────────────
+4.6  @@SFTP_DELETE_FILE  —  Delete a single file
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    path: string   // full remote file path
+  }
+
+  Server Response:
+    @@SUCCESS → "Deleted successfully"
+  On error:
+    @@ERROR   → "Error deleting file: <message>"
+
+────────────────────────────────────────────────────────────────────────────────
+4.7  @@SFTP_DELETE_DIR  —  Delete a directory
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    path: string   // full remote directory path
+  }
+
+  Server Response:
+    @@SUCCESS → "Deleted successfully"
+  On error:
+    @@ERROR   → "Error deleting directory: <message>"
+
+────────────────────────────────────────────────────────────────────────────────
+4.8  @@SFTP_CREATE_FILE  —  Create an empty file
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    filePath: string   // full remote file path to create
+  }
+
+  Server Response:
+    @@SUCCESS → "File created successfully"
+  On error:
+    @@ERROR   → "Error creating file: <message>"
+
+────────────────────────────────────────────────────────────────────────────────
+4.9  @@SFTP_CREATE_DIR  —  Create a directory (recursive)
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    folderPath: string   // full remote directory path
+  }
+
+  Server Response:
+    @@SUCCESS → "Folder created successfully"
+  On error:
+    @@ERROR   → "Error creating folder: <message>"
+
+────────────────────────────────────────────────────────────────────────────────
+4.10  @@SFTP_EXISTS  —  Check if a remote path exists
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    dirPath: string   // remote path to check
+  }
+
+  Server Response:
+    @@SFTP_FILES_LIST → string (the type: "d", "-", "l", or false)
+  On error:
+    @@ERROR → "Error checking existence: <message>"
+    @@ERROR → "File not found"
+
+────────────────────────────────────────────────────────────────────────────────
+4.11  @@SFTP_FILE_STATS  —  Get file/dir statistics
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    path: string   // remote path
+  }
+
+  Server Response:
+    @@SFTP_FILE_STATS → {
+      mode: number,
+      uid: number,
+      gid: number,
+      size: number,
+      accessTime: number,
+      modifyTime: number,
+      isDirectory: boolean,
+      isFile: boolean,
+      isBlockDevice: boolean,
+      isCharacterDevice: boolean,
+      isSymbolicLink: boolean,
+      isFIFO: boolean,
+      isSocket: boolean
+    }
+  On error:
+    @@ERROR → "Error getting stats: <message>"
+
+────────────────────────────────────────────────────────────────────────────────
+4.12  @@FILE_DOWNLOAD  —  Download a remote directory to server storage
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    path: string   // remote directory path
+  }
+
+  Server Response:
+    @@SUCCESS → "Folder Downloaded successfully"
+  On error:
+    @@ERROR   → "Error Downloading folder: <message>"
+
+  NOTE: This downloads to server-side storage. For client-side downloads,
+  use the REST POST /api/download endpoint instead.
+
+────────────────────────────────────────────────────────────────────────────────
+4.13  @@SFTP_ZIP_EXTRACT  —  Download a remote ZIP and extract on server
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    dirPath: string   // remote path to the .zip file
+  }
+
+  Server Response:
+    @@FILE_UPLOADED → string (the dirPath)
+  On error:
+    @@ERROR → string (error message)
+
+────────────────────────────────────────────────────────────────────────────────
+4.14  @@SFTP_EDIT_FILE_REQUEST  —  Read file content for editing
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    path: string   // remote file path
+  }
+
+  Server Response:
+    @@SFTP_EDIT_FILE_REQUEST_RESPONSE → string (file content as UTF-8 text)
+  On error:
+    @@ERROR → string (error message)
+
+────────────────────────────────────────────────────────────────────────────────
+4.15  @@SFTP_EDIT_FILE_DONE  —  Save edited file content
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    path: string,      // remote file path
+    content: string    // new file content
+  }
+
+  Server Response:
+    @@SUCCESS → "File edited successfully"
+  On error:
+    @@ERROR   → string (error message)
+
+────────────────────────────────────────────────────────────────────────────────
+4.16  @@SFTP_GET_DIR_TREE  —  Get directory tree (dirs only, cascading)
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    dirPath?: string,   // root path. Defaults to current path / cwd.
+    depth?: number      // max depth to recurse (default: 2, expand adds +2)
+  }
+
+  Server Response:
+    @@SFTP_DIR_TREE → {
+      root: TreeNode,   // see structure below
+      dirPath: string,
+      depth: number
+    }
+
+  TreeNode structure:
+  {
+    name: string,               // directory name
+    path: string,               // full remote path
+    children: TreeNode[] | null // null = unexpanded leaf (can request more)
+  }
+
+  Ignored directories (auto-skipped):
+    node_modules, .git, .hg, .svn, __pycache__, .cache, .npm, .yarn,
+    bower_components, .venv, venv, env, .env, dist, .next, .nuxt,
+    .turbo, .parcel-cache, .idea, .vscode, vendor, coverage, .tox,
+    .gradle, .cargo, target
+
+  On error:
+    @@ERROR → "Error fetching directory tree: <message>"
+
+────────────────────────────────────────────────────────────────────────────────
+4.17  @@CANCEL_UPLOADING  —  Cancel an in-progress upload
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+    string   // the file name (used as key in ABORT_CONTROLLER_MAP)
+
+  No explicit server response. The upload stream is destroyed and the
+  progress event emits status: "error".
+
+────────────────────────────────────────────────────────────────────────────────
+4.18  @@CANCEL_DOWNLOADING  —  Cancel an in-progress download
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+    string   // the file/dir name (used as key in ABORT_CONTROLLER_MAP)
+
+  No explicit server response. The download stream is destroyed and the
+  progress event emits status: "error".
+
+================================================================================
+5. EVENT CATALOG — SERVER → CLIENT
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+5.1  @@SFTP_READY  —  Connection established
+────────────────────────────────────────────────────────────────────────────────
+  Payload: true (boolean)
+  Emitted after successful @@SFTP_CONNECT.
+
+────────────────────────────────────────────────────────────────────────────────
+5.2  @@SFTP_CURRENT_PATH  —  Current working directory
+────────────────────────────────────────────────────────────────────────────────
+  Payload: string   // e.g. "/home/user"
+  Emitted after connect and after directory changes.
+
+────────────────────────────────────────────────────────────────────────────────
+5.3  @@SFTP_FILES_LIST  —  Directory listing result
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    files: string,       // JSON-stringified SFTP_FILES_LIST[]
+    currentDir: string   // the listed directory path
+  }
+
+  Each file entry in the parsed array:
+  {
+    accessTime: number,    // Unix timestamp
+    group: number,         // GID
+    longname: string,      // ls -l style string
+    modifyTime: number,    // Unix timestamp
+    name: string,          // file/dir name
+    owner: number,         // UID
+    rights: {
+      group: string,       // e.g. "rwx"
+      other: string,
+      user: string
+    },
+    size: number,          // bytes
+    type: string           // "d" = dir, "-" = file, "l" = symlink
+  }
+
+────────────────────────────────────────────────────────────────────────────────
+5.4  @@SFTP_DIR_TREE  —  Directory tree result
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    root: {
+      name: string,
+      path: string,
+      children: TreeNode[] | null
+    },
+    dirPath: string,
+    depth: number
+  }
+
+────────────────────────────────────────────────────────────────────────────────
+5.5  @@SFTP_EMIT_ERROR  —  SFTP-level error or connection closed
+────────────────────────────────────────────────────────────────────────────────
+  Payload: string
+  Examples:
+    "SFTP connection error: <message>"
+    "SFTP connection closed"
+    "SFTP error: <ssh2-level message>"
+    "No stored credentials and no credentials provided"
+
+────────────────────────────────────────────────────────────────────────────────
+5.6  @@SFTP_ENDED  —  SFTP session ended
+────────────────────────────────────────────────────────────────────────────────
+  Payload: "SFTP connection ended"
+
+────────────────────────────────────────────────────────────────────────────────
+5.7  @@SFTP_EDIT_FILE_REQUEST_RESPONSE  —  File content for editor
+────────────────────────────────────────────────────────────────────────────────
+  Payload: string   // UTF-8 file content
+
+────────────────────────────────────────────────────────────────────────────────
+5.8  @@SFTP_FILE_STATS  —  File stat result
+────────────────────────────────────────────────────────────────────────────────
+  Payload: ssh2-sftp-client Stats object (see 4.11 above)
+
+────────────────────────────────────────────────────────────────────────────────
+5.9  @@FILE_UPLOADED  —  Upload/extract complete notification
+────────────────────────────────────────────────────────────────────────────────
+  Payload: string   // the remote path that was uploaded
+
+────────────────────────────────────────────────────────────────────────────────
+5.10  @@SUCCESS  —  Generic success message
+────────────────────────────────────────────────────────────────────────────────
+  Payload: string
+  Examples:
+    "File renamed successfully"
+    "File moved successfully"
+    "File copied successfully"
+    "File created successfully"
+    "Folder created successfully"
+    "Deleted successfully"
+    "Folder Downloaded successfully"
+    "File edited successfully"
+    "<name>.zip Downloaded Successfully"
+
+────────────────────────────────────────────────────────────────────────────────
+5.11  @@ERROR  —  Generic error message
+────────────────────────────────────────────────────────────────────────────────
+  Payload: string   // "Error <action>: <message>"
+
+────────────────────────────────────────────────────────────────────────────────
+5.12  @@FILE_UPLOADED_PROGRESS  —  Upload progress (from REST upload)
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    name: string,          // filename
+    percent: string,       // e.g. "45.23"
+    transferred: number,   // bytes transferred
+    totalSize: number,     // total file size in bytes
+    remaining: string,     // human-readable remaining (e.g. "12.5 MB")
+    eta: number,           // estimated seconds remaining
+    speed: string,         // human-readable speed (e.g. "2.3 MB/s")
+    status: "uploading" | "completed" | "error"
+  }
+
+  NOTE: This is emitted on the GLOBAL io (not the /sftp namespace) because
+  the upload goes through the REST endpoint POST /api/upload.
+
+────────────────────────────────────────────────────────────────────────────────
+5.13  @@STARTING  —  Download is being prepared (from REST download)
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    name: string,
+    transferred: 0,
+    totalSize: 0,
+    percent: 100,
+    status: "preparing",
+    speed: 0,
+    eta: 0,
+    remaining: string
+  }
+
+────────────────────────────────────────────────────────────────────────────────
+5.14  @@PREPARING  —  Download size resolved, about to stream
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    name: string,
+    transferred: 0,
+    totalSize: number,      // actual file size
+    percent: 100,
+    status: "preparing",
+    speed: 0,
+    eta: 0,
+    remaining: string
+  }
+
+────────────────────────────────────────────────────────────────────────────────
+5.15  @@DOWNLOAD_PROGRESS  —  Download progress updates
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    name: string,
+    transferred: number,
+    totalSize: number,
+    percent: string,         // e.g. "67.89"
+    speed: string,           // human-readable speed
+    eta: number,             // seconds remaining
+    remaining: string,       // human-readable remaining
+    status: "starting" | "downloading" | "completed" | "error"
+  }
+
+────────────────────────────────────────────────────────────────────────────────
+5.16  @@COMPRESSING  —  Directory download: archiving in progress
+────────────────────────────────────────────────────────────────────────────────
+  Payload:
+  {
+    name: string,
+    transferred: number,
+    totalSize: number,
+    percent: 100,
+    status: "compressing",
+    speed: 0,
+    eta: 0,
+    remaining: string
+  }
+
+================================================================================
+6. REST / HTTP ENDPOINTS
+================================================================================
+
+All REST endpoints require an active SFTP session (identified by
+sftpSessionId or sessionId in the request body or query).
+
+────────────────────────────────────────────────────────────────────────────────
+6.1  POST /api/upload  —  Upload file(s) to remote server
+────────────────────────────────────────────────────────────────────────────────
+  Content-Type: multipart/form-data
+
+  Form Fields:
+    file               : File (or multiple files)
+    path               : string (remote directory to upload into)
+    sessionId          : string
+    sftpSessionId?     : string
+
+  Response (200):
+  {
+    status: true,
+    message: "File uploaded successfully",
+    result: string    // remote path of uploaded file
+  }
+
+  Side Effects:
+    Emits @@FILE_UPLOADED_PROGRESS on global socket during upload
+    Emits @@FILE_UPLOADED on global socket when complete
+
+────────────────────────────────────────────────────────────────────────────────
+6.2  POST /api/download  —  Download file or directory from remote server
+────────────────────────────────────────────────────────────────────────────────
+  Content-Type: application/json
+
+  Body:
+  {
+    remotePath: string,                // full remote path
+    type: "dir" | "file",              // what to download
+    name: string,                      // display name (used for progress)
+    sessionId?: string,
+    sftpSessionId?: string
+  }
+
+  Response:
+    - file: raw binary stream with appropriate headers
+    - dir:  application/zip stream (auto-archived with archiver)
+
+  Side Effects:
+    Emits @@STARTING, @@PREPARING, @@DOWNLOAD_PROGRESS, @@COMPRESSING
+    on the SFTP socket during download.
+
+────────────────────────────────────────────────────────────────────────────────
+6.3  POST /api/file/read  —  Read a remote file's content
+────────────────────────────────────────────────────────────────────────────────
+  Content-Type: application/json
+
+  Body:
+  {
+    path: string,
+    sessionId: string,
+    sftpSessionId?: string
+  }
+
+  Response (200):
+  {
+    status: true,
+    message: "File read successfully",
+    result: string    // file content as UTF-8 text
+  }
+
+────────────────────────────────────────────────────────────────────────────────
+6.4  POST /api/file/write  —  Write content to a remote file
+────────────────────────────────────────────────────────────────────────────────
+  Content-Type: application/json
+
+  Body:
+  {
+    path: string,
+    content: string,
+    sessionId: string,
+    sftpSessionId?: string
+  }
+
+  Response (200):
+  {
+    status: true,
+    message: "File written successfully",
+    result: null
+  }
+
+================================================================================
+7. PROGRESS & ABORT EVENTS — LIFECYCLE
+================================================================================
+
+Upload Lifecycle (via REST POST /api/upload):
+  1. Client sends multipart POST to /api/upload
+  2. Server emits @@FILE_UPLOADED_PROGRESS { status: "uploading", ... }
+     (repeated every 500ms)
+  3. On completion: @@FILE_UPLOADED_PROGRESS { status: "completed" }
+  4. On completion: @@FILE_UPLOADED (remote path)
+  5. To cancel: client emits @@CANCEL_UPLOADING with the filename
+
+Download Lifecycle (via REST POST /api/download — single file):
+  1. Client sends POST to /api/download { type: "file" }
+  2. Server emits @@STARTING   { status: "preparing" }
+  3. Server emits @@PREPARING  { status: "preparing", totalSize }
+  4. Server emits @@DOWNLOAD_PROGRESS { status: "downloading" }
+     (repeated every 1s)
+  5. On completion: @@DOWNLOAD_PROGRESS { status: "completed" }
+  6. To cancel: client emits @@CANCEL_DOWNLOADING with the name
+
+Download Lifecycle (via REST POST /api/download — directory):
+  1. Client sends POST to /api/download { type: "dir" }
+  2. Server walks remote directory tree, calculates total size
+  3. Server emits @@DOWNLOAD_PROGRESS { status: "starting" }
+  4. Server streams files into a zip archive
+  5. Server emits @@DOWNLOAD_PROGRESS { status: "downloading" }
+     (per-file progress aggregated)
+  6. Server emits @@COMPRESSING { status: "compressing" }
+  7. On completion: @@DOWNLOAD_PROGRESS { status: "completed" }
+  8. Emits @@SUCCESS "<name>.zip Downloaded Successfully"
+  9. To cancel: client emits @@CANCEL_DOWNLOADING with the name
+
+================================================================================
+8. TYPE DEFINITIONS & INTERFACES
+================================================================================
+
+// src/types/file-upload.ts
+
+interface FileOperationPayload {
+    oldPath?: string;
+    newPath?: string;
+    filePath?: string;
+    folderPath?: string;
+    dirPath?: string;
+    path?: string;
+}
+
+interface UploadedFile {
+    name: string;
+    data: Buffer;
+}
+
+interface EditFilePayload {
+    content: string;
+    path: string;
+}
+
+// src/types/sftp.interface.ts
+
+interface SFTP_FILES_LIST {
+    accessTime: number;
+    group: number;
+    longname: string;
+    modifyTime: number;
+    name: string;
+    owner: number;
+    rights: {
+        group: string;
+        other: string;
+        user: string;
+    };
+    size: number;
+    type: string;           // "d" | "-" | "l"
+}
+
+// SSH Connect Config (used internally)
+
+interface SFTPConnectPayload {
+    host: string;
+    port?: number;          // default: 22
+    username: string;
+    authMethod: "password" | "privateKey";
+    password?: string;
+    privateKeyText?: string;
+}
+
+// Directory Tree Node
+
+interface TreeNode {
+    name: string;
+    path: string;
+    children: TreeNode[] | null;
+}
+
+// Download Progress Payload
+
+interface DownloadProgress {
+    name: string;
+    transferred: number;
+    totalSize: number;
+    percent: string | number;
+    speed: string | number;
+    eta: number;
+    remaining: string;
+    status: "preparing" | "starting" | "downloading" |
+            "compressing" | "completed" | "error";
+}
+
+// Upload Progress Payload
+
+interface UploadProgress {
+    name: string;
+    percent: string;
+    transferred: number;
+    totalSize: number;
+    remaining: string;
+    eta: number;
+    speed: string;
+    status: "uploading" | "completed" | "error";
+}
+
+================================================================================
+9. AUTHENTICATION FLOW
+================================================================================
+
+1. Client connects to Socket.IO namespace /sftp with query params:
+     sessionId (required), sftpSessionId (optional)
+
+2. Client emits @@SFTP_CONNECT with credentials:
+     Option A: Explicit { host, port, username, authMethod, password/privateKey }
+     Option B: Empty payload → server reads from Redis key `sftp:<sessionId>`
+
+3. Server calls ssh2-sftp-client.connect() with parsed config.
+
+4. On success: @@SFTP_READY → true, plus initial file listing.
+
+5. Credentials are stored/updated in Redis under `sftp:<sessionId>` for
+   reconnect and REST endpoint use.
+
+6. REST endpoints resolve the SFTP session via sftpSessionId/sessionId
+   from the request body or query string.
+
+================================================================================
+10. ERROR HANDLING PATTERN
+================================================================================
+
+Socket Events:
+  - @@SFTP_EMIT_ERROR  : SFTP connection-level errors (connect fail, closed, etc.)
+  - @@ERROR            : Operation-level errors (file not found, permission denied)
+  - @@SFTP_ENDED       : Clean session end
+
+REST Endpoints:
+  - HTTP 400 : Missing file in upload
+  - HTTP 404 : No SFTP session found for given ID
+  - HTTP 499 : Aborted by client (cancel)
+  - HTTP 500 : Internal/SFTP error
+    Body: { status: false, message: string, result: null }
+
+The SFTP service also cleans up sessions automatically on:
+  - Socket disconnect event
+  - SFTP client 'end' event
+  - SFTP client 'close' event
+  - SFTP client 'error' event
+
+================================================================================
+11. QUICK-START CODE SNIPPETS FOR FRONTEND
+================================================================================
+
+// ─── 1. Connect to SFTP ─────────────────────────────────────────────────
+
+import { io } from "socket.io-client";
+
+const BACKEND_URL = "http://localhost:3000";
+const sessionId = "your-ssh-session-id";
+const sftpSessionId = crypto.randomUUID();
+
+const sftp = io(`${BACKEND_URL}/sftp`, {
+  query: { sessionId, sftpSessionId },
+});
+
+// ─── 2. Authenticate & Connect ──────────────────────────────────────────
+
+sftp.emit("@@SFTP_CONNECT", {
+  host: "192.168.1.10",
+  port: 22,
+  username: "root",
+  authMethod: "password",
+  password: "secret",
+});
+
+// ─── 3. Listen for ready + file list ────────────────────────────────────
+
+sftp.on("@@SFTP_READY", (ready) => {
+  console.log("SFTP connected:", ready);
+});
+
+sftp.on("@@SFTP_FILES_LIST", (data) => {
+  const files = JSON.parse(data.files);
+  console.log("Directory:", data.currentDir, "Files:", files);
+});
+
+sftp.on("@@SFTP_CURRENT_PATH", (path) => {
+  console.log("Current path:", path);
+});
+
+// ─── 4. Navigate directories ────────────────────────────────────────────
+
+sftp.emit("@@SFTP_GET_FILE", { dirPath: "/var/www" });
+
+// ─── 5. Get directory tree ──────────────────────────────────────────────
+
+sftp.emit("@@SFTP_GET_DIR_TREE", { dirPath: "/home/user", depth: 3 });
+
+sftp.on("@@SFTP_DIR_TREE", (data) => {
+  console.log("Tree:", data.root);
+});
+
+// ─── 6. File operations ─────────────────────────────────────────────────
+
+sftp.emit("@@SFTP_CREATE_FILE",  { filePath: "/home/user/new.txt" });
+sftp.emit("@@SFTP_CREATE_DIR",   { folderPath: "/home/user/newdir" });
+sftp.emit("@@SFTP_RENAME_FILE",  { oldPath: "/a.txt", newPath: "/b.txt" });
+sftp.emit("@@SFTP_MOVE_FILE",    { oldPath: "/a.txt", newPath: "/dir/a.txt" });
+sftp.emit("@@SFTP_COPY_FILE",    { currentPath: "/a.txt", destinationPath: "/b.txt" });
+sftp.emit("@@SFTP_DELETE_FILE",  { path: "/home/user/old.txt" });
+sftp.emit("@@SFTP_DELETE_DIR",   { path: "/home/user/olddir" });
+
+// ─── 7. Edit file ───────────────────────────────────────────────────────
+
+sftp.emit("@@SFTP_EDIT_FILE_REQUEST", { path: "/etc/config.yml" });
+
+sftp.on("@@SFTP_EDIT_FILE_REQUEST_RESPONSE", (content) => {
+  // Show content in editor, then save:
+  sftp.emit("@@SFTP_EDIT_FILE_DONE", {
+    path: "/etc/config.yml",
+    content: "updated content here",
+  });
+});
+
+// ─── 8. File stats ──────────────────────────────────────────────────────
+
+sftp.emit("@@SFTP_FILE_STATS", { path: "/var/log/syslog" });
+
+sftp.on("@@SFTP_FILE_STATS", (stats) => {
+  console.log("Size:", stats.size, "Modified:", stats.modifyTime);
+});
+
+// ─── 9. Upload via REST ─────────────────────────────────────────────────
+
+const formData = new FormData();
+formData.append("file", fileBlob, "report.pdf");
+formData.append("path", "/home/user/uploads");
+formData.append("sftpSessionId", sftpSessionId);
+
+await fetch(`${BACKEND_URL}/api/upload`, {
+  method: "POST",
+  body: formData,
+});
+
+// Listen for upload progress on the MAIN socket (not /sftp namespace)
+mainSocket.on("@@FILE_UPLOADED_PROGRESS", (progress) => {
+  console.log(`${progress.name}: ${progress.percent}% - ${progress.status}`);
+});
+
+// ─── 10. Download via REST ──────────────────────────────────────────────
+
+const response = await fetch(`${BACKEND_URL}/api/download`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    remotePath: "/home/user/project",
+    type: "dir",
+    name: "project",
+    sftpSessionId: sftpSessionId,
+  }),
+});
+const blob = await response.blob();
+// Save blob...
+
+// Listen for download progress on the SFTP socket
+sftp.on("@@DOWNLOAD_PROGRESS", (progress) => {
+  console.log(`${progress.name}: ${progress.percent}% - ${progress.status}`);
+});
+
+// ─── 11. Cancel upload/download ─────────────────────────────────────────
+
+sftp.emit("@@CANCEL_UPLOADING", "report.pdf");
+sftp.emit("@@CANCEL_DOWNLOADING", "project");
+
+// ─── 12. Error handling ─────────────────────────────────────────────────
+
+sftp.on("@@SFTP_EMIT_ERROR", (msg) => console.error("SFTP Error:", msg));
+sftp.on("@@ERROR", (msg) => console.error("Operation Error:", msg));
+sftp.on("@@SUCCESS", (msg) => console.log("Success:", msg));
+sftp.on("@@SFTP_ENDED", (msg) => console.warn("Session ended:", msg));
+
+// ─── 13. Check existence ────────────────────────────────────────────────
+
+sftp.emit("@@SFTP_EXISTS", { dirPath: "/home/user/.bashrc" });
+
+// ─── 14. Extract ZIP on remote ──────────────────────────────────────────
+
+sftp.emit("@@SFTP_ZIP_EXTRACT", { dirPath: "/home/user/archive.zip" });
+
+sftp.on("@@FILE_UPLOADED", (path) => {
+  console.log("Extracted to:", path);
+});
+
+================================================================================
+  END OF AUDIT REPORT
+================================================================================

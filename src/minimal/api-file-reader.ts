@@ -4,29 +4,42 @@ import {
   RegisteredMemoryFile,
   registerFileSystemOverlay,
 } from '@codingame/monaco-vscode-files-service-override';
+import { SftpSocket, type SftpFileEntry } from './sftp-socket';
 
 // ---------------------------------------------------------------------------
 // API File Reader Plugin
 //
-// Reads a remote file via POST /api/file/read using:
-//   - sessionId from URL query ?tabId= (or defaults to empty)
-//   - path from URL query ?path=
+// Handles two modes based on URL query ?path=:
+//   1. File path (has extension) → fetch via POST /api/file/read, open in editor
+//   2. Directory path → fetch listing via POST /api/files, populate explorer
 //
-// On activation, fetches the file and loads it into the virtual filesystem
-// so explorer, editor, search all work.
+// Also connects Socket.IO to /sftp for real-time file operations
+// (create, rename, delete, etc.)
 // ---------------------------------------------------------------------------
 
 export interface ApiFileReaderOptions {
-  /** Base URL for the API (default: same origin) */
   apiBase?: string;
-  /** Base path inside the virtual FS (default: /workspace) */
   basePath?: string;
 }
 
 interface ApiResponse {
   status: boolean;
   message: string;
-  result: string;
+  result: any;
+}
+
+interface FilesApiResponse {
+  status: boolean;
+  message: string;
+  result: {
+    currentDir: string;
+    files: SftpFileEntry[];
+  };
+}
+
+function isFilePath(p: string): boolean {
+  const last = p.split('/').pop() || '';
+  return last.includes('.') && !last.startsWith('.');
 }
 
 export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugin {
@@ -48,21 +61,37 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
       const params = new URLSearchParams(window.location.search);
       const remotePath = params.get('path');
       const sessionId = params.get('tabId') ?? '';
+      const user = params.get('user') ?? '';
 
       if (!remotePath) {
-        console.log('[ApiFileReader] No ?path= query param, skipping auto-load');
+        console.log('[ApiFileReader] No ?path= query param, skipping');
         return;
       }
 
-      // Auto-load on activation
-      console.log('[ApiFileReader] Loading file:', remotePath);
-      loadFile(remotePath, sessionId).catch((err) => {
-        console.error('[ApiFileReader] Load failed:', err);
-        ctx.vscode.window.showErrorMessage(`Failed to load file: ${err.message}`);
-      });
+      // Map remote path → virtual FS path for save interception
+      const remoteToVirtual = new Map<string, string>();
+
+      // Connect Socket.IO for file operations
+      const sftp = new SftpSocket(apiBase, sessionId);
+      disposables.push({ dispose: () => sftp.disconnect() });
+
+      // Decide: file or directory
+      if (isFilePath(remotePath)) {
+        console.log('[ApiFileReader] Loading file:', remotePath);
+        loadFile(remotePath, sessionId).catch((err) => {
+          console.error('[ApiFileReader] Load failed:', err);
+          ctx.vscode.window.showErrorMessage(`Failed to load file: ${err.message}`);
+        });
+      } else {
+        console.log('[ApiFileReader] Loading directory:', remotePath);
+        loadDirectory(remotePath, sessionId).catch((err) => {
+          console.error('[ApiFileReader] Dir load failed:', err);
+          ctx.vscode.window.showErrorMessage(`Failed to load directory: ${err.message}`);
+        });
+      }
 
       // -------------------------------------------------------------------
-      // Fetch a single file from the API
+      // Fetch single file via REST
       // -------------------------------------------------------------------
 
       async function fetchFile(filePath: string, sid: string): Promise<string> {
@@ -71,21 +100,14 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId: sid, path: filePath }),
         });
-
-        if (!res.ok) {
-          throw new Error(`API returned ${res.status}: ${await res.text()}`);
-        }
-
+        if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
         const data: ApiResponse = await res.json();
-        if (!data.status) {
-          throw new Error(data.message || 'File read failed');
-        }
-
+        if (!data.status) throw new Error(data.message || 'File read failed');
         return data.result;
       }
 
       // -------------------------------------------------------------------
-      // Load a file into the virtual FS and open it
+      // Load single file into virtual FS and open in editor
       // -------------------------------------------------------------------
 
       async function loadFile(filePath: string, sid: string): Promise<void> {
@@ -94,11 +116,11 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
         const vsPath = `${basePath}/${fileName}`;
         const uri = ctx.vscode.Uri.file(vsPath);
 
+        remoteToVirtual.set(vsPath, filePath);
+
         try {
           fsProvider.registerFile(new RegisteredMemoryFile(uri, content));
-        } catch {
-          // File already registered
-        }
+        } catch { /* already registered */ }
 
         const doc = await ctx.vscode.workspace.openTextDocument(uri);
         await ctx.vscode.window.showTextDocument(doc);
@@ -106,7 +128,70 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
       }
 
       // -------------------------------------------------------------------
-      // Save file back to remote via API
+      // Load directory listing via REST POST /api/files
+      // -------------------------------------------------------------------
+
+      async function loadDirectory(dirPath: string, sid: string): Promise<void> {
+        const res = await fetch(`${apiBase}/api/files`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sftpSessionId: sid, path: dirPath }),
+        });
+        if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+        const data: FilesApiResponse = await res.json();
+        if (!data.status) throw new Error(data.message || 'Directory listing failed');
+
+        const { files, currentDir } = data.result;
+        console.log('[ApiFileReader] Directory:', currentDir, `(${files.length} entries)`);
+
+        // Register directories first, then files
+        for (const entry of files) {
+          const vsPath = `${basePath}/${entry.name}`;
+          const uri = ctx.vscode.Uri.file(vsPath);
+          const entryRemotePath = `${currentDir}/${entry.name}`.replace(/\/+/g, '/');
+
+          if (entry.type === 'd') {
+            // Register directory as empty (lazy — loaded on demand)
+            try {
+              fsProvider.registerFile(new RegisteredMemoryFile(uri, ''));
+            } catch { /* already registered */ }
+          } else if (entry.type === '-') {
+            // Register file placeholder (content loaded on open)
+            remoteToVirtual.set(vsPath, entryRemotePath);
+            try {
+              fsProvider.registerFile(new RegisteredMemoryFile(uri, ''));
+            } catch { /* already registered */ }
+          }
+        }
+
+        // Auto-open the first file
+        const firstFile = files.find(f => f.type === '-');
+        if (firstFile) {
+          const firstRemote = `${currentDir}/${firstFile.name}`.replace(/\/+/g, '/');
+          await loadFileContent(firstRemote, `${basePath}/${firstFile.name}`, sid);
+        }
+      }
+
+      // -------------------------------------------------------------------
+      // Load file content into an already-registered virtual file
+      // -------------------------------------------------------------------
+
+      async function loadFileContent(remoteFP: string, vsPath: string, sid: string): Promise<void> {
+        const content = await fetchFile(remoteFP, sid);
+        const uri = ctx.vscode.Uri.file(vsPath);
+
+        // Re-register with actual content
+        try {
+          fsProvider.registerFile(new RegisteredMemoryFile(uri, content));
+        } catch { /* already registered — update via edit */ }
+
+        const doc = await ctx.vscode.workspace.openTextDocument(uri);
+        await ctx.vscode.window.showTextDocument(doc);
+        console.log('[ApiFileReader] Opened:', vsPath);
+      }
+
+      // -------------------------------------------------------------------
+      // Save file back to remote via REST
       // -------------------------------------------------------------------
 
       async function saveFile(filePath: string, sid: string, content: string): Promise<void> {
@@ -115,29 +200,22 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId: sid, path: filePath, content }),
         });
-
-        if (!res.ok) {
-          throw new Error(`API returned ${res.status}: ${await res.text()}`);
-        }
-
+        if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
         const data: ApiResponse = await res.json();
-        if (!data.status) {
-          throw new Error(data.message || 'File write failed');
-        }
+        if (!data.status) throw new Error(data.message || 'File write failed');
       }
 
-      // Intercept save — when the document is saved, push content to the API
+      // Intercept save — resolve virtual path to remote path and push
       disposables.push(
         ctx.vscode.workspace.onWillSaveTextDocument((e) => {
           const doc = e.document;
-          const fileName = remotePath!.split('/').pop() || 'file';
-          const expectedPath = `${basePath}/${fileName}`;
+          const remoteFilePath = remoteToVirtual.get(doc.uri.path);
 
-          if (doc.uri.path === expectedPath) {
+          if (remoteFilePath) {
             e.waitUntil(
-              saveFile(remotePath!, sessionId, doc.getText())
+              saveFile(remoteFilePath, sessionId, doc.getText())
                 .then(() => {
-                  console.log('[ApiFileReader] Saved:', remotePath);
+                  console.log('[ApiFileReader] Saved:', remoteFilePath);
                   return [] as any;
                 })
                 .catch((err) => {
@@ -151,33 +229,16 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
       );
 
       // -------------------------------------------------------------------
-      // Expose service for manual use
+      // Expose services
       // -------------------------------------------------------------------
 
       ctx.services.register('apiFileReader', {
-        loadFile: (path: string, sid?: string) =>
-          loadFile(path, sid ?? sessionId),
-        fetchFile: (path: string, sid?: string) =>
-          fetchFile(path, sid ?? sessionId),
-        saveFile: (path: string, content: string, sid?: string) =>
-          saveFile(path, sid ?? sessionId, content),
+        loadFile: (path: string, sid?: string) => loadFile(path, sid ?? sessionId),
+        loadDirectory: (path: string, sid?: string) => loadDirectory(path, sid ?? sessionId),
+        fetchFile: (path: string, sid?: string) => fetchFile(path, sid ?? sessionId),
+        saveFile: (path: string, content: string, sid?: string) => saveFile(path, sid ?? sessionId, content),
+        sftp,
       });
-
-      // -------------------------------------------------------------------
-      // Command for manual load
-      // -------------------------------------------------------------------
-
-      disposables.push(
-        ctx.registerCommand('apiFileReader.load', async () => {
-          const path = await ctx.vscode.window.showInputBox({
-            prompt: 'Remote file path to load',
-            value: remotePath ?? '',
-          });
-          if (path) {
-            await loadFile(path, sessionId);
-          }
-        }),
-      );
     },
 
     deactivate() {

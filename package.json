@@ -72,6 +72,7 @@
     "@codingame/monaco-vscode-xml-default-extension": "^28.4.1",
     "@codingame/monaco-vscode-yaml-default-extension": "^28.4.1",
     "monaco-editor": "npm:@codingame/monaco-vscode-editor-api@^28.4.1",
+    "socket.io-client": "^4.8.3",
     "vscode": "npm:@codingame/monaco-vscode-extension-api@^28.4.1",
     "vscode-languageclient": "^9.0.1"
   },
