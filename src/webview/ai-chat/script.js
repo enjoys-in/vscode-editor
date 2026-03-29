@@ -1,25 +1,10 @@
-// --- Global error handler ---
-window.onerror = function(msg, src, line, col, err) {
-  console.error('[AI Chat WebView] Error:', msg, 'at', src, line, col, err);
-  var errDiv = document.getElementById('_debug');
-  if (errDiv) errDiv.textContent += '\n[ERR] ' + msg + ' L' + line;
-};
-
-console.log('[AI Chat WebView] Script starting...');
-console.log('[AI Chat WebView] CHAT_ENDPOINT placeholder check...');
-
 var vscode;
-try {
-  vscode = acquireVsCodeApi();
-  console.log('[AI Chat WebView] acquireVsCodeApi OK');
-} catch(e) {
-  console.error('[AI Chat WebView] acquireVsCodeApi FAILED:', e);
+try { vscode = acquireVsCodeApi(); } catch(e) {
   document.body.innerHTML = '<div style="color:red;padding:20px;">acquireVsCodeApi failed: ' + e.message + '</div>';
   throw e;
 }
 
 const CHAT_ENDPOINT = __CHAT_ENDPOINT__;
-console.log('[AI Chat WebView] CHAT_ENDPOINT:', CHAT_ENDPOINT);
 
 let providers = [];
 let selectedProviderId = '';
@@ -27,6 +12,7 @@ let selectedModelId = '';
 let history = [];
 let abortController = null;
 let isStreaming = false;
+let applyIdCounter = 0;
 
 /* --- @file autocomplete state --- */
 let workspaceFiles = [];
@@ -49,20 +35,11 @@ const clearBtn = document.getElementById('clear-btn');
 const chipsEl = document.getElementById('context-chips');
 const dropdownEl = document.getElementById('file-dropdown');
 
-console.log('[AI Chat WebView] DOM elements:', {
-  providerSelect: !!providerSelect, modelSelect: !!modelSelect,
-  messagesEl: !!messagesEl, welcomeEl: !!welcomeEl,
-  inputEl: !!inputEl, sendBtn: !!sendBtn,
-  sendIcon: !!sendIcon, sendLabel: !!sendLabel,
-  clearBtn: !!clearBtn
-});
-
 // SVG icons
 const ICON_SEND = '<svg viewBox="0 0 16 16"><path d="M1 1.5l14 6.5-14 6.5V9l10-1-10-1V1.5z"/></svg>';
 const ICON_STOP = '<svg viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>';
 
 // --- Init ---
-console.log('[AI Chat WebView] Posting init messages...');
 vscode.postMessage({ type: 'getProviders' });
 vscode.postMessage({ type: 'getWorkspaceFiles' });
 
@@ -77,7 +54,6 @@ document.querySelectorAll('.hint').forEach(h => {
 // --- Message from extension host ---
 window.addEventListener('message', (e) => {
   const msg = e.data;
-  console.log('[AI Chat WebView] Received message:', msg.type, msg);
   if (msg.type === 'providers') {
     providers = msg.data.filter(p => p.available);
     renderProviders();
@@ -113,26 +89,20 @@ window.addEventListener('message', (e) => {
     welcomeEl.style.display = 'none';
     const question = d.question;
     history.push({ role: 'user', content: question });
-    appendMessage('user', esc(question), false, true);
+    appendMessage('user', question);
     saveState();
     streamResponse(question, lastEditorContext, []);
   }
   if (msg.type === 'applyResult') {
-    // Extension host confirms apply success — update block state
     const block = document.querySelector('.code-block[data-apply-id="' + msg.applyId + '"]');
     if (block) {
-      if (msg.success) {
-        flashBlock(block, 'applied');
-      } else {
-        flashBlock(block, 'rejected');
-      }
+      flashBlock(block, msg.success ? 'applied' : 'rejected');
     }
   }
 });
 
 // --- Provider/Model selectors ---
 function renderProviders() {
-  console.log('[AI Chat WebView] renderProviders called, providers:', providers.length, providers);
   providerSelect.innerHTML = providers.map(p =>
     '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'
   ).join('');
@@ -141,7 +111,6 @@ function renderProviders() {
     providerSelect.value = saved.providerId;
   }
   selectedProviderId = providerSelect.value;
-  console.log('[AI Chat WebView] selectedProviderId:', selectedProviderId);
   renderModels();
 }
 
@@ -170,16 +139,13 @@ function saveState() { vscode.setState({ providerId: selectedProviderId, modelId
 (function restore() {
   try {
     const s = getState();
-    console.log('[AI Chat WebView] Restoring state:', s ? Object.keys(s) : 'empty');
     if (s.history && s.history.length) {
       history = s.history;
       welcomeEl.style.display = 'none';
-      history.forEach(m => appendMessage(m.role, m.content, false));
+      history.forEach(m => appendMessage(m.role, m.content));
       scrollToBottom();
     }
-  } catch(e) {
-    console.error('[AI Chat WebView] Restore failed:', e);
-  }
+  } catch(e) { /* ignore corrupted state */ }
 })();
 
 // =====================================================================
@@ -303,67 +269,11 @@ function updateDdActive(items) {
 }
 
 // =====================================================================
-// Diff computation (simple line-based)
-// =====================================================================
-function computeDiff(oldText, newText) {
-  const oldLines = oldText.split('\n');
-  const newLines = newText.split('\n');
-
-  // Simple LCS-based diff
-  const m = oldLines.length, n = newLines.length;
-  // For large files, use a simplified approach
-  if (m + n > 2000) {
-    // Fallback: show all old as removed, all new as added
-    const result = [];
-    oldLines.forEach(l => result.push({ type: 'del', text: l }));
-    newLines.forEach(l => result.push({ type: 'add', text: l }));
-    return result;
-  }
-
-  // Build LCS table
-  const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      dp[i][j] = oldLines[i - 1] === newLines[j - 1]
-        ? dp[i - 1][j - 1] + 1
-        : Math.max(dp[i - 1][j], dp[i][j - 1]);
-    }
-  }
-
-  // Backtrack
-  const result = [];
-  let i = m, j = n;
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
-      result.unshift({ type: 'ctx', text: oldLines[i - 1] });
-      i--; j--;
-    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-      result.unshift({ type: 'add', text: newLines[j - 1] });
-      j--;
-    } else {
-      result.unshift({ type: 'del', text: oldLines[i - 1] });
-      i--;
-    }
-  }
-  return result;
-}
-
-function renderDiffHtml(diffLines) {
-  return '<div class="diff-view">' +
-    diffLines.map(d =>
-      '<div class="diff-line diff-' + d.type + '">' + escHtml(d.text) + '</div>'
-    ).join('') +
-    '</div>';
-}
-
-// =====================================================================
 // Chat logic
 // =====================================================================
-let applyIdCounter = 0;
 
 function requestSend() {
   const text = inputEl.value.trim();
-  console.log('[AI Chat WebView] requestSend called, text:', text, 'isStreaming:', isStreaming);
   if (!text || isStreaming) return;
   inputEl.value = '';
   autoResize();
@@ -372,42 +282,38 @@ function requestSend() {
   window._pendingFiles = [...attachedFiles];
   attachedFiles = [];
   renderChips();
-  console.log('[AI Chat WebView] Posting getEditorContext...');
   vscode.postMessage({ type: 'getEditorContext' });
 }
 
 function sendChat(editorCtx) {
   const question = window._pendingQuestion || '';
-  console.log('[AI Chat WebView] sendChat called, question:', question, 'ctx:', editorCtx);
   if (!question) return;
   const files = window._pendingFiles || [];
   window._pendingQuestion = null;
   window._pendingFiles = null;
   welcomeEl.style.display = 'none';
 
-  let userHtml = esc(question);
+  let extra = '';
   if (files.length) {
-    userHtml += '<div class="context-badge"><svg style="width:10px;height:10px;fill:currentColor;vertical-align:middle" viewBox="0 0 16 16"><path d="M13.9 2.5L10.2 1 5.8 2.8 2 1.5v12l3.8 1.3L10.2 13l3.7 1.5V2.5z"/></svg> ';
-    userHtml += files.map(f => '<span class="cb-file">' + esc(f.path.split('/').pop()) + '</span>').join(' ');
-    userHtml += '</div>';
+    extra = '<div class="context-badge"><svg style="width:10px;height:10px;fill:currentColor;vertical-align:middle" viewBox="0 0 16 16"><path d="M13.9 2.5L10.2 1 5.8 2.8 2 1.5v12l3.8 1.3L10.2 13l3.7 1.5V2.5z"/></svg> ';
+    extra += files.map(f => '<span class="cb-file">' + esc(f.path.split('/').pop()) + '</span>').join(' ');
+    extra += '</div>';
   }
 
   history.push({ role: 'user', content: question });
-  appendMessage('user', userHtml, false, true);
+  appendMessage('user', question, extra);
   saveState();
   streamResponse(question, editorCtx, files);
 }
 
 async function streamResponse(question, ctx, files) {
-  console.log('[AI Chat WebView] streamResponse called');
-  console.log('[AI Chat WebView] CHAT_ENDPOINT:', CHAT_ENDPOINT);
   isStreaming = true;
   sendIcon.innerHTML = ICON_STOP;
   sendLabel.textContent = 'Stop';
   sendBtn.classList.add('stop');
 
   abortController = new AbortController();
-  const el = appendMessage('assistant', '', true);
+  const el = appendMessage('assistant', '', null, true);
   const contentEl = el.querySelector('.content');
   let full = '';
 
@@ -415,28 +321,24 @@ async function streamResponse(question, ctx, files) {
     .filter(f => f.content)
     .map(f => ({ path: f.path, language: f.language || 'plaintext', content: f.content.slice(0, 8000) }));
 
-  const body = {
-    question,
-    language: ctx.language || 'plaintext',
-    fileName: ctx.fileName || '',
-    context: (ctx.context || '').slice(0, 4000),
-    selection: (ctx.selection || '').slice(0, 2000),
-    fileContext,
-    providerId: selectedProviderId,
-    modelId: selectedModelId,
-    history: history.slice(0, -1).slice(-20),
-  };
-  console.log('[AI Chat WebView] Sending fetch to:', CHAT_ENDPOINT, 'body keys:', Object.keys(body));
-
   try {
     const res = await fetch(CHAT_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: abortController.signal,
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        question,
+        language: ctx.language || 'plaintext',
+        fileName: ctx.fileName || '',
+        context: (ctx.context || '').slice(0, 4000),
+        selection: (ctx.selection || '').slice(0, 2000),
+        fileContext,
+        providerId: selectedProviderId,
+        modelId: selectedModelId,
+        history: history.slice(0, -1).slice(-20),
+      }),
     });
 
-    console.log('[AI Chat WebView] Fetch response:', res.status, res.statusText);
     if (!res.ok) throw new Error((await res.text()) || 'HTTP ' + res.status);
 
     const reader = res.body.getReader();
@@ -463,8 +365,7 @@ async function streamResponse(question, ctx, files) {
       }
     }
   } catch (err) {
-    console.error('[AI Chat WebView] Stream error:', err);
-    if (err.name === 'AbortError') full += '\n\n*\u2014 Stopped*';
+    if (err.name === 'AbortError') full += '\n\n*— Stopped*';
     else full = '**Error:** ' + err.message;
   }
 
@@ -482,7 +383,6 @@ async function streamResponse(question, ctx, files) {
 
 // --- Buttons ---
 sendBtn.addEventListener('click', () => {
-  console.log('[AI Chat WebView] Send button clicked, isStreaming:', isStreaming);
   if (isStreaming && abortController) abortController.abort();
   else requestSend();
 });
@@ -502,8 +402,11 @@ clearBtn.addEventListener('click', () => {
   saveState();
 });
 
-// --- DOM helpers ---
-function appendMessage(role, content, streaming, rawHtml) {
+// =====================================================================
+// DOM helpers
+// =====================================================================
+
+function appendMessage(role, content, extraHtml, streaming) {
   const svg = role === 'user'
     ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM2 13c0-2.8 2.2-5 5-5h2c2.8 0 5 2.2 5 5v1H2v-1z"/></svg>'
     : '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l1.8 3.6L14 5.4l-3 2.9.7 4.1L8 10.5 4.3 12.4l.7-4.1-3-2.9 4.2-.8z"/></svg>';
@@ -511,14 +414,15 @@ function appendMessage(role, content, streaming, rawHtml) {
   const div = document.createElement('div');
   div.className = 'msg ' + role;
 
-  const rendered = rawHtml ? content : (content ? renderMarkdown(content) : '');
+  const rendered = streaming ? '' : renderMarkdown(content);
   div.innerHTML =
     '<div class="avatar">' + svg + '</div>' +
     '<div class="body"><div class="name">' + label + '</div>' +
     '<div class="content">' + rendered +
-    (streaming ? '<span class="cursor"></span>' : '') + '</div></div>';
+    (streaming ? '<span class="cursor"></span>' : '') + '</div>' +
+    (extraHtml || '') + '</div>';
   messagesEl.appendChild(div);
-  if (!streaming && !rawHtml) bindCodeBlockActions(div);
+  if (!streaming && content) bindCodeBlockActions(div);
   scrollToBottom();
   return div;
 }
@@ -536,54 +440,137 @@ function addSystemMessage(text) {
 
 function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
 
-// --- Markdown ---
+// =====================================================================
+// Markdown renderer
+// =====================================================================
+
 function renderMarkdown(text) {
-  return text
-    .replace(/```(\w*)?\n([\s\S]*?)```/g, (_, lang, code) => {
-      const l = lang || 'code';
-      const aid = ++applyIdCounter;
-      const codeEscaped = escAttr(code.trim());
+  if (!text) return '';
 
-      // Compute diff if we have editor context
-      let diffHtml = '';
-      if (lastEditorContext) {
-        const original = lastEditorContext.selection || lastEditorContext.context || '';
-        if (original.trim()) {
-          const diff = computeDiff(original, code.trim());
-          const hasChanges = diff.some(d => d.type !== 'ctx');
-          if (hasChanges) {
-            diffHtml = renderDiffHtml(diff);
-          }
-        }
+  // Step 1: Extract code blocks to protect them
+  var codeBlocks = [];
+  var processed = text.replace(/```(\w*)?\n([\s\S]*?)```/g, function(_, lang, code) {
+    var idx = codeBlocks.length;
+    var l = lang || 'code';
+    var aid = ++applyIdCounter;
+    codeBlocks.push(
+      '<div class="code-block" data-lang="' + escAttr(l) + '" data-code="' + escAttr(code.trim()) + '" data-apply-id="' + aid + '">' +
+      '<div class="code-bar"><span class="code-lang">' + esc(l) + '</span>' +
+      '<div class="code-actions">' +
+      '<button class="act-accept" title="Accept (diff in editor)">\u2713 Accept</button>' +
+      '<button class="act-undo" title="Undo apply">\u21A9 Undo</button>' +
+      '<button class="act-insert" title="Insert at cursor">\u2193 Insert</button>' +
+      '<button class="act-copy" title="Copy">\u2398 Copy</button>' +
+      '<button class="act-newfile" title="New file">\u2B1A New</button>' +
+      '<button class="act-dismiss" title="Dismiss">\u2717</button>' +
+      '</div></div>' +
+      '<div class="code-content"><pre><code>' + escHtml(code.trim()) + '</code></pre></div></div>'
+    );
+    return '\x00CB' + idx + '\x00';
+  });
+
+  // Step 2: Process block-level markdown line by line
+  var lines = processed.split('\n');
+  var html = '';
+  var inList = false;
+  var listType = '';
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+
+    // Code block placeholder
+    var cbMatch = line.match(/^\x00CB(\d+)\x00$/);
+    if (cbMatch) {
+      if (inList) { html += '</' + listType + '>'; inList = false; }
+      html += codeBlocks[parseInt(cbMatch[1])];
+      continue;
+    }
+
+    // Headings
+    var hMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (hMatch) {
+      if (inList) { html += '</' + listType + '>'; inList = false; }
+      var level = hMatch[1].length;
+      html += '<h' + level + '>' + inlineMarkdown(hMatch[2]) + '</h' + level + '>';
+      continue;
+    }
+
+    // Horizontal rule
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
+      if (inList) { html += '</' + listType + '>'; inList = false; }
+      html += '<hr>';
+      continue;
+    }
+
+    // Blockquote
+    if (line.match(/^>\s?(.*)$/)) {
+      if (inList) { html += '</' + listType + '>'; inList = false; }
+      var bqContent = line.replace(/^>\s?/, '');
+      while (i + 1 < lines.length && lines[i + 1].match(/^>\s?/)) {
+        i++;
+        bqContent += '\n' + lines[i].replace(/^>\s?/, '');
       }
+      html += '<blockquote>' + inlineMarkdown(bqContent).replace(/\n/g, '<br>') + '</blockquote>';
+      continue;
+    }
 
-      const diffAttr = diffHtml ? ' data-has-diff="1"' : '';
-      return '<div class="code-block" data-lang="' + escAttr(l) + '" data-code="' + codeEscaped + '" data-apply-id="' + aid + '"' + diffAttr + '>' +
-        '<div class="code-bar"><span class="code-lang">' + esc(l) + '</span>' +
-        (diffHtml ? '<div class="view-toggle"><button class="tog-code active" title="Code">Code</button><button class="tog-diff" title="Diff">Diff</button></div>' : '') +
-        '<div class="code-actions">' +
-        '<button class="act-accept" title="Accept & format">\u2713 Accept</button>' +
-        '<button class="act-undo" title="Undo apply">\u21A9 Undo</button>' +
-        '<button class="act-insert" title="Insert at cursor">\u2193 Insert</button>' +
-        '<button class="act-copy" title="Copy">\u2398 Copy</button>' +
-        '<button class="act-newfile" title="New file">\u2B1A New</button>' +
-        '<button class="act-dismiss" title="Dismiss">\u2717</button>' +
-        '</div></div>' +
-        '<div class="code-content">' +
-        '<pre><code>' + escHtml(code.trim()) + '</code></pre>' +
-        (diffHtml ? '<div class="diff-container" style="display:none">' + diffHtml + '</div>' : '') +
-        '</div></div>';
-    })
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-    .replace(/\n/g, '<br>');
+    // Unordered list
+    var ulMatch = line.match(/^(\s*)[*\-+]\s+(.+)$/);
+    if (ulMatch) {
+      if (!inList || listType !== 'ul') {
+        if (inList) html += '</' + listType + '>';
+        html += '<ul>';
+        inList = true;
+        listType = 'ul';
+      }
+      html += '<li>' + inlineMarkdown(ulMatch[2]) + '</li>';
+      continue;
+    }
+
+    // Ordered list
+    var olMatch = line.match(/^(\s*)\d+[.)]\s+(.+)$/);
+    if (olMatch) {
+      if (!inList || listType !== 'ol') {
+        if (inList) html += '</' + listType + '>';
+        html += '<ol>';
+        inList = true;
+        listType = 'ol';
+      }
+      html += '<li>' + inlineMarkdown(olMatch[2]) + '</li>';
+      continue;
+    }
+
+    // Close list if we hit a non-list line
+    if (inList && line.trim()) { html += '</' + listType + '>'; inList = false; }
+
+    // Empty line
+    if (!line.trim()) {
+      continue;
+    }
+
+    // Normal text
+    html += '<p>' + inlineMarkdown(line) + '</p>';
+  }
+
+  if (inList) html += '</' + listType + '>';
+  return html;
 }
 
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-function escAttr(s){return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function inlineMarkdown(text) {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.+?)__/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/_([^_]+)_/g, '<em>$1</em>')
+    .replace(/~~(.+?)~~/g, '<del>$1</del>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // =====================================================================
 // Code block action handlers
@@ -606,36 +593,12 @@ function flashBlock(block, cls) {
 
 function bindCodeBlockActions(container) {
   container.querySelectorAll('.code-block').forEach(block => {
-    // --- View toggle (Code / Diff) ---
-    const togCode = block.querySelector('.tog-code');
-    const togDiff = block.querySelector('.tog-diff');
-    const preEl = block.querySelector('pre');
-    const diffEl = block.querySelector('.diff-container');
-
-    if (togCode && togDiff && preEl && diffEl) {
-      togCode.addEventListener('click', () => {
-        togCode.classList.add('active');
-        togDiff.classList.remove('active');
-        preEl.style.display = '';
-        diffEl.style.display = 'none';
-      });
-      togDiff.addEventListener('click', () => {
-        togDiff.classList.add('active');
-        togCode.classList.remove('active');
-        preEl.style.display = 'none';
-        diffEl.style.display = '';
-      });
-    }
-
-    // --- Accept: smart apply (whole file or selection) + format ---
+    // --- Accept: open diff in editor ---
     block.querySelector('.act-accept')?.addEventListener('click', () => {
       const code = getCodeFromBlock(block);
       const applyId = block.dataset.applyId;
-      // Determine mode: if we had a selection, replace selection; otherwise replace whole file
-      const mode = (lastEditorContext && lastEditorContext.selection && lastEditorContext.selection.trim())
-        ? 'selection' : 'wholeFile';
-      vscode.postMessage({ type: 'applyCode', code, applyId, mode, format: true });
-      flashBlock(block, 'applied');
+      const lang = block.dataset.lang || 'plaintext';
+      vscode.postMessage({ type: 'showDiff', code, applyId, language: lang });
     });
 
     // --- Undo ---
@@ -680,5 +643,3 @@ function bindCodeBlockActions(container) {
     });
   });
 }
-
-console.log('[AI Chat WebView] Script fully loaded and ready.');

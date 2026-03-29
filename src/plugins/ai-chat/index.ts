@@ -102,29 +102,20 @@ export function createAIChatPlugin(options?: AIChatOptions): Plugin {
 
       void getApi().then(async (vscodeApi) => {
         let webviewView: any = null;
-        console.log('[AI Chat] Plugin activated, registering webview provider...');
         vscodeApi.window.registerWebviewViewProvider('ai-chat-view', {
           resolveWebviewView(view) {
-            console.log('[AI Chat] resolveWebviewView called');
             webviewView = view;
             webviewView.webview.options = {
               enableScripts: true,
             };
-            const chatUrl = apiUrl('aiChat');
-            console.log('[AI Chat] Chat endpoint:', chatUrl);
-            webviewView.webview.html = getChatHtml(chatUrl);
-            console.log('[AI Chat] Webview HTML set, length:', webviewView.webview.html.length);
+            webviewView.webview.html = getChatHtml(apiUrl('aiChat'));
 
             // Handle messages from webview
             webviewView.webview.onDidReceiveMessage(async (msg: any) => {
-              console.log('[AI Chat] Received from webview:', msg.type, msg);
               if (msg.type === 'getProviders') {
                 try {
-                  const provUrl = apiUrl('aiProviders');
-                  console.log('[AI Chat] Fetching providers from:', provUrl);
-                  const res = await fetch(provUrl);
+                  const res = await fetch(apiUrl('aiProviders'));
                   const data = await res.json();
-                  console.log('[AI Chat] Providers response:', data);
                   if (data.success) {
                     webviewView.webview.postMessage({
                       type: 'providers',
@@ -133,11 +124,10 @@ export function createAIChatPlugin(options?: AIChatOptions): Plugin {
                   } else {
                     webviewView.webview.postMessage({
                       type: 'error',
-                      message: `Provider API returned success=false: ${JSON.stringify(data)}`,
+                      message: `Provider API error: ${JSON.stringify(data)}`,
                     });
                   }
                 } catch (err: any) {
-                  console.error('[AI Chat] Failed to fetch providers:', err);
                   webviewView.webview.postMessage({
                     type: 'error',
                     message: `Failed to fetch providers: ${err.message}`,
@@ -149,7 +139,6 @@ export function createAIChatPlugin(options?: AIChatOptions): Plugin {
                 const editor = vscodeApi.window.activeTextEditor;
                 const selection = editor?.selection;
                 const doc = editor?.document;
-                console.log('[AI Chat] getEditorContext: editor=', !!editor, 'doc=', !!doc);
                 webviewView.webview.postMessage({
                   type: 'editorContext',
                   data: {
@@ -194,42 +183,67 @@ export function createAIChatPlugin(options?: AIChatOptions): Plugin {
                 }
               }
 
-              // --- Accept: smart apply (whole file or selection) + format ---
-              if (msg.type === 'applyCode') {
+              // --- showDiff: open Monaco diff editor with Keep / Undo ---
+              if (msg.type === 'showDiff') {
                 const editor = vscodeApi.window.activeTextEditor;
                 if (!editor) {
-                  vscodeApi.window.showWarningMessage('No active editor to apply code to.');
+                  vscodeApi.window.showWarningMessage('No active editor — open a file first.');
                   webviewView.webview.postMessage({ type: 'applyResult', applyId: msg.applyId, success: false });
                   return;
                 }
                 try {
-                  const doc = editor.document;
-                  if (msg.mode === 'wholeFile') {
-                    // Replace entire file content
+                  const targetDoc = editor.document;
+                  const targetUri = targetDoc.uri;
+                  const originalText = targetDoc.getText();
+                  const proposedText = msg.code;
+
+                  // Create a virtual document with the proposed content
+                  const proposedUri = vscodeApi.Uri.parse(
+                    `untitled:ai-suggestion-${msg.applyId}.${msg.language || 'txt'}`,
+                  );
+                  const proposedDoc = await vscodeApi.workspace.openTextDocument({
+                    content: proposedText,
+                    language: targetDoc.languageId,
+                  });
+
+                  // Open the diff editor: original (left) vs proposed (right)
+                  const fileName = targetUri.path.split('/').pop() || 'file';
+                  await vscodeApi.commands.executeCommand(
+                    'vscode.diff',
+                    targetUri,
+                    proposedDoc.uri,
+                    `${fileName} ↔ AI Suggestion (Keep / Undo)`,
+                  );
+
+                  // Show Keep / Undo action buttons
+                  const pick = await vscodeApi.window.showInformationMessage(
+                    'Apply this AI suggestion?',
+                    { modal: false },
+                    'Keep',
+                    'Undo',
+                  );
+
+                  if (pick === 'Keep') {
+                    // Apply: replace the original file content with proposed
+                    const ed = await vscodeApi.window.showTextDocument(targetUri);
                     const fullRange = new vscodeApi.Range(
-                      doc.positionAt(0),
-                      doc.positionAt(doc.getText().length),
+                      targetDoc.positionAt(0),
+                      targetDoc.positionAt(originalText.length),
                     );
-                    await editor.edit((eb: any) => {
-                      eb.replace(fullRange, msg.code);
+                    await ed.edit((eb: any) => {
+                      eb.replace(fullRange, proposedText);
                     });
-                  } else {
-                    // Replace selection or insert at cursor
-                    await editor.edit((eb: any) => {
-                      if (editor.selection && !editor.selection.isEmpty) {
-                        eb.replace(editor.selection, msg.code);
-                      } else {
-                        eb.insert(editor.selection.active, msg.code);
-                      }
-                    });
-                  }
-                  // Format document after apply if requested
-                  if (msg.format) {
+                    // Format after apply
                     await vscodeApi.commands.executeCommand('editor.action.formatDocument');
+                    webviewView.webview.postMessage({ type: 'applyResult', applyId: msg.applyId, success: true });
+                    vscodeApi.window.showInformationMessage('AI suggestion applied.');
+                  } else {
+                    // Undo / dismissed — go back to original file
+                    await vscodeApi.window.showTextDocument(targetUri);
+                    webviewView.webview.postMessage({ type: 'applyResult', applyId: msg.applyId, success: false });
                   }
-                  webviewView.webview.postMessage({ type: 'applyResult', applyId: msg.applyId, success: true });
                 } catch (err: any) {
-                  vscodeApi.window.showErrorMessage(`Apply failed: ${err.message}`);
+                  vscodeApi.window.showErrorMessage(`Diff failed: ${err.message}`);
                   webviewView.webview.postMessage({ type: 'applyResult', applyId: msg.applyId, success: false });
                 }
               }
