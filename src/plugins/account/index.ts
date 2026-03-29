@@ -1,22 +1,18 @@
 import type { Plugin, PluginContext, Disposable } from '@core/types';
 import { registerExtension } from '@codingame/monaco-vscode-api/extensions';
 import { ExtensionHostKind } from '@codingame/monaco-vscode-extensions-service-override';
-import { AccountStorage, type ConnectionProfile } from './storage';
+import { ConnectionStorage, type ConnectionProfile } from './storage';
 
 // ---------------------------------------------------------------------------
-// Account Plugin — sidebar panel with login + SFTP connection profiles
+// SFTP Connections Plugin — sidebar panel with saved connection profiles
 //
 // Registers a VS Code sidebar view (activity bar icon) showing:
-//   - Account status (sign in / sign out)
 //   - Saved SFTP connection profiles (click to connect)
 //   - Add / delete profiles
 //   - Connection status
 // ---------------------------------------------------------------------------
 
 type TreeItemType =
-  | 'account-header'
-  | 'login-button'
-  | 'logout-button'
   | 'connections-header'
   | 'profile'
   | 'add-profile'
@@ -36,12 +32,12 @@ export function createAccountPlugin(): Plugin {
   const disposables: Disposable[] = [];
 
   return {
-    id: 'builtin.account',
-    name: 'Account Manager',
+    id: 'builtin.sftp-connections',
+    name: 'SFTP Connections',
     version: '1.0.0',
 
     activate(ctx: PluginContext) {
-      const storage = new AccountStorage();
+      const storage = new ConnectionStorage();
       let connectedProfile: string | null = null;
 
       // ---------------------------------------------------------------
@@ -90,21 +86,18 @@ export function createAccountPlugin(): Plugin {
       void getApi().then(async (vscodeApi) => {
         onDidChangeEmitter = new vscodeApi.EventEmitter<SftpTreeItem | undefined>();
 
-        // Register commands using the extension's own API so tree view items can find them
-        disposables.push(vscodeApi.commands.registerCommand('account.login', () => loginFlow()));
-        disposables.push(vscodeApi.commands.registerCommand('account.logout', () => doLogout()));
-        disposables.push(vscodeApi.commands.registerCommand('account.menu', () => accountMenu()));
-        disposables.push(vscodeApi.commands.registerCommand('account.addProfile', () => addProfileFlow()));
-        disposables.push(vscodeApi.commands.registerCommand('account.deleteProfile', (p?: ConnectionProfile) => deleteProfileFlow(p)));
-        disposables.push(vscodeApi.commands.registerCommand('account.connectProfile', (p: ConnectionProfile) => connectToProfile(p)));
-        disposables.push(vscodeApi.commands.registerCommand('account.disconnect', () => {
+        disposables.push(vscodeApi.commands.registerCommand('sftp.addProfile', () => addProfileFlow()));
+        disposables.push(vscodeApi.commands.registerCommand('sftp.deleteProfile', (p?: ConnectionProfile) => deleteProfileFlow(p)));
+        disposables.push(vscodeApi.commands.registerCommand('sftp.connectProfile', (p: ConnectionProfile) => connectToProfile(p)));
+        disposables.push(vscodeApi.commands.registerCommand('sftp.disconnect', () => {
           const workspace = ctx.services.get<any>('workspace');
           workspace?.sftpDisconnect();
           connectedProfile = null;
+          updateStatus();
           refreshTree();
           ctx.vscode.window.showInformationMessage('SFTP disconnected.');
         }));
-        disposables.push(vscodeApi.commands.registerCommand('account.loadRemoteFolder', async () => {
+        disposables.push(vscodeApi.commands.registerCommand('sftp.loadRemoteFolder', async () => {
           const workspace = ctx.services.get<any>('workspace');
           if (!workspace?.sftpConnected) {
             ctx.vscode.window.showErrorMessage('Not connected to SFTP.');
@@ -118,11 +111,11 @@ export function createAccountPlugin(): Plugin {
             await workspace.sftpLoadFolder(remotePath);
           }
         }));
+        disposables.push(vscodeApi.commands.registerCommand('sftp.menu', () => sftpMenu()));
 
         function getTreeItems(): SftpTreeItem[] {
           const items: SftpTreeItem[] = [];
 
-          // Connection status
           if (connectedProfile) {
             items.push({
               type: 'connected-header',
@@ -133,7 +126,6 @@ export function createAccountPlugin(): Plugin {
             items.push({ type: 'disconnect-button', label: 'Disconnect' });
           }
 
-          // Saved profiles (always visible, no login required)
           items.push({ type: 'connections-header', label: 'Saved Connections' });
 
           const profiles = storage.getProfiles();
@@ -163,27 +155,16 @@ export function createAccountPlugin(): Plugin {
             item.description = element.description;
 
             switch (element.type) {
-              case 'account-header':
-                item.iconPath = new vscodeApi.ThemeIcon('account');
-                break;
-              case 'login-button':
-                item.iconPath = new vscodeApi.ThemeIcon('sign-in');
-                item.command = { command: 'account.login', title: 'Sign In' };
-                break;
-              case 'logout-button':
-                item.iconPath = new vscodeApi.ThemeIcon('sign-out');
-                item.command = { command: 'account.logout', title: 'Sign Out' };
-                break;
               case 'connected-header':
                 item.iconPath = new vscodeApi.ThemeIcon('vm-active');
                 break;
               case 'disconnect-button':
                 item.iconPath = new vscodeApi.ThemeIcon('debug-disconnect');
-                item.command = { command: 'account.disconnect', title: 'Disconnect' };
+                item.command = { command: 'sftp.disconnect', title: 'Disconnect' };
                 break;
               case 'load-folder-button':
                 item.iconPath = new vscodeApi.ThemeIcon('folder-opened');
-                item.command = { command: 'account.loadRemoteFolder', title: 'Load Folder' };
+                item.command = { command: 'sftp.loadRemoteFolder', title: 'Load Folder' };
                 break;
               case 'connections-header':
                 item.iconPath = new vscodeApi.ThemeIcon('server-environment');
@@ -191,7 +172,7 @@ export function createAccountPlugin(): Plugin {
               case 'profile':
                 item.iconPath = new vscodeApi.ThemeIcon('server');
                 item.command = {
-                  command: 'account.connectProfile',
+                  command: 'sftp.connectProfile',
                   title: 'Connect',
                   arguments: [element.profile],
                 };
@@ -199,7 +180,7 @@ export function createAccountPlugin(): Plugin {
                 break;
               case 'add-profile':
                 item.iconPath = new vscodeApi.ThemeIcon('add');
-                item.command = { command: 'account.addProfile', title: 'Add Connection' };
+                item.command = { command: 'sftp.addProfile', title: 'Add Connection' };
                 break;
               case 'no-profiles':
                 item.iconPath = new vscodeApi.ThemeIcon('info');
@@ -218,7 +199,7 @@ export function createAccountPlugin(): Plugin {
       });
 
       // ---------------------------------------------------------------
-      // Status bar — shows login state (right side)
+      // Status bar
       // ---------------------------------------------------------------
 
       const statusItem = ctx.vscode.window.createStatusBarItem(
@@ -233,82 +214,19 @@ export function createAccountPlugin(): Plugin {
         if (connectedProfile) {
           statusItem.text = `$(vm-active) ${connectedProfile}`;
           statusItem.tooltip = 'Connected to SFTP';
-          statusItem.command = 'account.menu';
+          statusItem.command = 'sftp.menu';
         } else {
           statusItem.text = '$(remote-explorer) SFTP';
           statusItem.tooltip = 'Open SFTP connections';
-          statusItem.command = 'account.menu';
+          statusItem.command = 'sftp.menu';
         }
       }
 
       // ---------------------------------------------------------------
-      // Login / Register flow
+      // Quick-pick menu (from status bar)
       // ---------------------------------------------------------------
 
-      async function loginFlow(): Promise<boolean> {
-        const action = await ctx.vscode.window.showQuickPick(
-          ['Sign In', 'Create Account'],
-          { placeHolder: 'Choose an action' },
-        );
-        if (!action) return false;
-
-        const username = await ctx.vscode.window.showInputBox({
-          prompt: 'Username',
-          placeHolder: 'Enter your username',
-          validateInput(value) {
-            if (!value || value.length < 2) return 'Username must be at least 2 characters';
-            if (!/^[a-zA-Z0-9_-]+$/.test(value)) return 'Only letters, numbers, _ and - allowed';
-            return null;
-          },
-        });
-        if (!username) return false;
-
-        const password = await ctx.vscode.window.showInputBox({
-          prompt: 'Password',
-          password: true,
-          validateInput(value) {
-            if (!value || value.length < 4) return 'Password must be at least 4 characters';
-            return null;
-          },
-        });
-        if (!password) return false;
-
-        if (action === 'Create Account') {
-          const confirm = await ctx.vscode.window.showInputBox({
-            prompt: 'Confirm password',
-            password: true,
-          });
-          if (confirm !== password) {
-            ctx.vscode.window.showErrorMessage('Passwords do not match.');
-            return false;
-          }
-          const ok = await storage.register(username, password);
-          if (!ok) {
-            ctx.vscode.window.showErrorMessage(`Username "${username}" is already taken.`);
-            return false;
-          }
-          await storage.login(username, password);
-          ctx.vscode.window.showInformationMessage(`Account created. Welcome, ${username}!`);
-        } else {
-          const ok = await storage.login(username, password);
-          if (!ok) {
-            ctx.vscode.window.showErrorMessage('Invalid username or password.');
-            return false;
-          }
-          ctx.vscode.window.showInformationMessage(`Welcome back, ${username}!`);
-        }
-
-        updateStatus();
-        refreshTree();
-        ctx.events.emit('account:login', { username: storage.currentUser });
-        return true;
-      }
-
-      // ---------------------------------------------------------------
-      // Account menu (from status bar)
-      // ---------------------------------------------------------------
-
-      async function accountMenu(): Promise<void> {
+      async function sftpMenu(): Promise<void> {
         const items = ['$(remote-explorer) Open SFTP Panel', '$(add) Add Connection'];
         if (connectedProfile) {
           items.push('$(debug-disconnect) Disconnect');
@@ -331,17 +249,6 @@ export function createAccountPlugin(): Plugin {
         }
       }
 
-      function doLogout() {
-        connectedProfile = null;
-        const workspace = ctx.services.get<any>('workspace');
-        workspace?.sftpDisconnect();
-        storage.logout();
-        updateStatus();
-        refreshTree();
-        ctx.events.emit('account:logout');
-        ctx.vscode.window.showInformationMessage('Signed out.');
-      }
-
       // ---------------------------------------------------------------
       // Connect to a profile
       // ---------------------------------------------------------------
@@ -354,10 +261,6 @@ export function createAccountPlugin(): Plugin {
         }
 
         try {
-          let password: string | undefined;
-          if (profile.encryptedPassword) {
-            password = await storage.getProfilePassword(profile);
-          }
           if (profile.usePrivateKey) {
             const key = await ctx.vscode.window.showInputBox({
               prompt: 'Paste your private key',
@@ -372,10 +275,20 @@ export function createAccountPlugin(): Plugin {
                 privateKey: key,
               });
               connectedProfile = profile.label;
+              updateStatus();
               refreshTree();
               return;
             }
           }
+
+          let password = profile.password;
+          if (!password) {
+            password = await ctx.vscode.window.showInputBox({
+              prompt: `Password for ${profile.username}@${profile.host}`,
+              password: true,
+            });
+          }
+          if (!password) return;
 
           await workspace.sftpConnect({
             bridgeUrl: profile.bridgeUrl,
@@ -386,6 +299,7 @@ export function createAccountPlugin(): Plugin {
           });
 
           connectedProfile = profile.label;
+          updateStatus();
           refreshTree();
 
           const remotePath = await ctx.vscode.window.showInputBox({
@@ -438,19 +352,19 @@ export function createAccountPlugin(): Plugin {
         let password: string | undefined;
         if (authMethod === 'Password') {
           password = await ctx.vscode.window.showInputBox({
-            prompt: 'SSH Password',
+            prompt: 'SSH Password (saved locally)',
             password: true,
           });
         }
 
         const bridgeUrl = await ctx.vscode.window.showInputBox({
           prompt: 'SFTP Bridge WebSocket URL',
-          placeHolder: 'ws://localhost:3100',
-          value: 'ws://localhost:3100',
+          placeHolder: 'ws://localhost:7145',
+          value: 'ws://localhost:7145',
         });
         if (!bridgeUrl) return;
 
-        const profile = storage.addProfileSimple({
+        storage.addProfile({
           label,
           bridgeUrl,
           host,
@@ -503,10 +417,10 @@ export function createAccountPlugin(): Plugin {
       // Register service
       // ---------------------------------------------------------------
 
-      ctx.services.register('account', {
+      ctx.services.register('sftp-connections', {
         get connectedProfile() { return connectedProfile; },
         getProfiles: () => storage.getProfiles(),
-        addProfile: (p: any) => storage.addProfileSimple(p),
+        addProfile: (p: any) => storage.addProfile(p),
         deleteProfile: (id: string) => { storage.deleteProfile(id); refreshTree(); },
         connectProfile: (p: ConnectionProfile) => connectToProfile(p),
       });

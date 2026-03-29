@@ -3,6 +3,7 @@ import { createWorkspacePlugin } from '@plugins/workspace';
 import { createAICompletionPlugin } from '@plugins/ai-completion';
 import { createAccountPlugin } from '@plugins/account';
 import { createApiFileReaderPlugin } from './api-file-reader';
+import { enableVsixDragAndDrop } from './extension-loader';
 
 async function main() {
   console.log('[Minimal] Starting...', Date.now());
@@ -16,13 +17,13 @@ async function main() {
   // AI completion — inline suggestions
   app.registerPlugin(
     createAICompletionPlugin({
-        
+
       // endpoint: 'https://api.openai.com/v1/chat/completions',
       // apiKey: 'YOUR_KEY',
     }),
   );
 
-  // Account — SFTP sidebar panel + saved connection profiles
+  // SFTP connections — sidebar panel + saved connection profiles
   app.registerPlugin(createAccountPlugin());
 
   // API File Reader — loads files from POST /api/file/read
@@ -33,6 +34,9 @@ async function main() {
 
   await app.boot();
   console.log('[Minimal] Boot complete, all plugins activated');
+
+  // Drag-and-drop .vsix to install extensions
+  enableVsixDragAndDrop(document.body);
 
   (window as any).app = app;
 }

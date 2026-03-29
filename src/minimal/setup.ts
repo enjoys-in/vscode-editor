@@ -7,25 +7,25 @@
 // ---------------------------------------------------------------------------
 
 import {
-  IEditorOverrideServices,
-  IWorkbenchConstructionOptions,
-  LogLevel,
-  initialize as initializeMonacoService,
+    IEditorOverrideServices,
+    IWorkbenchConstructionOptions,
+    LogLevel,
+    initialize as initializeMonacoService,
 } from '@codingame/monaco-vscode-api';
 import { EnvironmentOverride } from '@codingame/monaco-vscode-api/workbench';
 import { ExtensionHostKind, registerExtension } from '@codingame/monaco-vscode-api/extensions';
 import getConfigurationServiceOverride, {
-  IStoredWorkspace,
-  initUserConfiguration,
+    IStoredWorkspace,
+    initUserConfiguration,
 } from '@codingame/monaco-vscode-configuration-service-override';
 import getKeybindingsServiceOverride, {
-  initUserKeybindings,
+    initUserKeybindings,
 } from '@codingame/monaco-vscode-keybindings-service-override';
 import getFilesServiceOverride, {
-  RegisteredFileSystemProvider,
-  RegisteredMemoryFile,
-  registerFileSystemOverlay,
-  createIndexedDBProviders,
+    RegisteredFileSystemProvider,
+    RegisteredMemoryFile,
+    registerFileSystemOverlay,
+    createIndexedDBProviders,
 } from '@codingame/monaco-vscode-files-service-override';
 import * as monaco from 'monaco-editor';
 import * as vscode from 'vscode';
@@ -77,49 +77,23 @@ import defaultKeybindings from './user/keybindings.json?raw';
 let initialized = false;
 
 // ---------------------------------------------------------------------------
-// Fake Worker helper
+// Workers — real Worker instances via getWorker()
 // ---------------------------------------------------------------------------
 
-class FakeWorker {
-  constructor(
-    public url: string | URL,
-    public options?: WorkerOptions,
-  ) {}
-}
-
-const workers: Record<string, FakeWorker> = {
-  editorWorkerService: new FakeWorker(
-    new URL('monaco-editor/esm/vs/editor/editor.worker.js', import.meta.url),
-    { type: 'module' },
-  ),
-  extensionHostWorkerMain: new FakeWorker(
-    new URL('@codingame/monaco-vscode-api/workers/extensionHost.worker', import.meta.url),
-    { type: 'module' },
-  ),
-  TextMateWorker: new FakeWorker(
-    new URL('@codingame/monaco-vscode-textmate-service-override/worker', import.meta.url),
-    { type: 'module' },
-  ),
-  LanguageDetectionWorker: new FakeWorker(
-    new URL(
-      '@codingame/monaco-vscode-language-detection-worker-service-override/worker',
-      import.meta.url,
-    ),
-    { type: 'module' },
-  ),
-  LocalFileSearchWorker: new FakeWorker(
-    new URL('@codingame/monaco-vscode-search-service-override/worker', import.meta.url),
-    { type: 'module' },
-  ),
+const workerUrls: Record<string, URL> = {
+    editorWorkerService: new URL('monaco-editor/esm/vs/editor/editor.worker.js', import.meta.url),
+    extensionHostWorkerMain: new URL('@codingame/monaco-vscode-api/workers/extensionHost.worker', import.meta.url),
+    TextMateWorker: new URL('@codingame/monaco-vscode-textmate-service-override/worker', import.meta.url),
+    LanguageDetectionWorker: new URL('@codingame/monaco-vscode-language-detection-worker-service-override/worker', import.meta.url),
+    LocalFileSearchWorker: new URL('@codingame/monaco-vscode-search-service-override/worker', import.meta.url),
 };
 
 window.MonacoEnvironment = {
-  getWorkerUrl(_workerId: string, label: string) {
-    return workers[label]?.url.toString() ?? '';
-  },
-  getWorkerOptions(_workerId: string, label: string) {
-    return workers[label]?.options;
-  },
+    getWorker(_workerId: string, label: string) {
+        const url = workerUrls[label];
+        if (!url) throw new Error(`Unknown worker: ${label}`);
+        return new Worker(url, { type: 'module' });
+    },
 };
 
 // ---------------------------------------------------------------------------
@@ -129,21 +103,21 @@ window.MonacoEnvironment = {
 const workspaceFile = monaco.Uri.file('/workspace.code-workspace');
 
 function setupFileSystem() {
-  const fileSystemProvider = new RegisteredFileSystemProvider(false);
+    const fileSystemProvider = new RegisteredFileSystemProvider(false);
 
-  fileSystemProvider.registerFile(
-    new RegisteredMemoryFile(
-      workspaceFile,
-      JSON.stringify(
-        { folders: [{ path: '/workspace' }] } satisfies IStoredWorkspace,
-        null,
-        2,
-      ),
-    ),
-  );
+    fileSystemProvider.registerFile(
+        new RegisteredMemoryFile(
+            workspaceFile,
+            JSON.stringify(
+                { folders: [{ path: '/workspace' }] } satisfies IStoredWorkspace,
+                null,
+                2,
+            ),
+        ),
+    );
 
-  registerFileSystemOverlay(1, fileSystemProvider);
-  return fileSystemProvider;
+    registerFileSystemOverlay(1, fileSystemProvider);
+    return fileSystemProvider;
 }
 
 // ---------------------------------------------------------------------------
@@ -151,40 +125,40 @@ function setupFileSystem() {
 // ---------------------------------------------------------------------------
 
 const minimalServices: IEditorOverrideServices = {
-  ...getLogServiceOverride(),
-  ...getFilesServiceOverride(),
-  ...getExtensionServiceOverride({ enableWorkerExtensionHost: false }),
-  ...getModelServiceOverride(),
-  ...getNotificationsServiceOverride(),
-  ...getDialogsServiceOverride(),
-  ...getConfigurationServiceOverride(),
-  ...getKeybindingsServiceOverride(),
-  ...getTextmateServiceOverride(),
-  ...getThemeServiceOverride(),
-  ...getLanguagesServiceOverride(),
-  ...getBannerServiceOverride(),
-  ...getStatusBarServiceOverride(),
-  ...getTitleBarServiceOverride(),
-  ...getStorageServiceOverride({
-    fallbackOverride: {
-      'workbench.activity.showAccounts': false,
-    },
-  }),
-  ...getLifecycleServiceOverride(),
-  ...getEnvironmentServiceOverride(),
-  ...getWorkingCopyServiceOverride(),
-  ...getExplorerServiceOverride(),
-  ...getSnippetServiceOverride(),
-  ...getSearchServiceOverride(),
-  ...getLanguageDetectionWorkerServiceOverride(),
-  ...getRemoteAgentServiceOverride({ scanRemoteExtensions: false }),
-  ...getSecretStorageServiceOverride(),
-  ...getAuthenticationServiceOverride(),
-  ...getExtensionGalleryServiceOverride({ webOnly: false }),
-  // ...getViewsServiceOverride(),
-  // Chat/AI overrides removed — they require GitHub Copilot Chat (not on Open VSX)
-  // ...getChatServiceOverride(),
-  // ...getAiServiceOverride(),
+    ...getLogServiceOverride(),
+    ...getFilesServiceOverride(),
+    ...getExtensionServiceOverride({ enableWorkerExtensionHost: false }),
+    ...getModelServiceOverride(),
+    ...getNotificationsServiceOverride(),
+    ...getDialogsServiceOverride(),
+    ...getConfigurationServiceOverride(),
+    ...getKeybindingsServiceOverride(),
+    ...getTextmateServiceOverride(),
+    ...getThemeServiceOverride(),
+    ...getLanguagesServiceOverride(),
+    ...getBannerServiceOverride(),
+    ...getStatusBarServiceOverride(),
+    ...getTitleBarServiceOverride(),
+    ...getStorageServiceOverride({
+        fallbackOverride: {
+            'workbench.activity.showAccounts': false,
+        },
+    }),
+    ...getLifecycleServiceOverride(),
+    ...getEnvironmentServiceOverride(),
+    ...getWorkingCopyServiceOverride(),
+    ...getExplorerServiceOverride(),
+    ...getSnippetServiceOverride(),
+    ...getSearchServiceOverride(),
+    ...getLanguageDetectionWorkerServiceOverride(),
+    ...getRemoteAgentServiceOverride({ scanRemoteExtensions: false }),
+    ...getSecretStorageServiceOverride(),
+    ...getAuthenticationServiceOverride(),
+    ...getExtensionGalleryServiceOverride({ webOnly: false }),
+    // ...getViewsServiceOverride(),
+
+    ...getChatServiceOverride(),
+    ...getAiServiceOverride(),
 };
 
 // ---------------------------------------------------------------------------
@@ -192,45 +166,49 @@ const minimalServices: IEditorOverrideServices = {
 // ---------------------------------------------------------------------------
 
 const constructOptions: IWorkbenchConstructionOptions = {
-  enableWorkspaceTrust: false,
-  windowIndicator: {
-    label: 'WebTerminal — Minimal',
-    tooltip: '',
-    command: '',
-  },
-  productConfiguration: {
-    nameShort: 'WebTerminal',
-    nameLong: 'WebTerminal Minimal',
-    extensionsGallery: {
-      serviceUrl: 'https://open-vsx.org/vscode/gallery',
-      resourceUrlTemplate:
-        'https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/{path}',
-      extensionUrlTemplate:
-        'https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest',
-      controlUrl: '',
-      nlsBaseUrl: '',
+    enableWorkspaceTrust: false,
+    windowIndicator: {
+        label: 'WebTerminal — Minimal',
+        tooltip: '',
+        command: '',
     },
-  },
-  workspaceProvider: {
-    trusted: true,
-    async open() {
-      return false;
+    productConfiguration: {
+        nameShort: 'WebTerminal',
+        nameLong: 'WebTerminal Minimal',
+        extensionsGallery: {
+            serviceUrl: 'https://open-vsx.org/vscode/gallery',
+            resourceUrlTemplate:
+                'https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/{path}',
+            extensionUrlTemplate:
+                'https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest',
+            controlUrl: '',
+            nlsBaseUrl: '',
+            // VS Marketplace (uncomment to switch):
+            // serviceUrl: 'https://marketplace.visualstudio.com/_apis/public/gallery',
+            // resourceUrlTemplate: 'https://{publisher}.vscode-unpkg.net/{publisher}/{name}/{version}/{path}',
+            // extensionUrlTemplate: 'https://marketplace.visualstudio.com/items?itemName={publisher}.{name}',
+        },
     },
-    workspace: {
-      workspaceUri: workspaceFile,
+    workspaceProvider: {
+        trusted: true,
+        async open() {
+            return false;
+        },
+        workspace: {
+            workspaceUri: workspaceFile,
+        },
     },
-  },
-  developmentOptions: {
-    logLevel: LogLevel.Warning,
-  },
-  configurationDefaults: {
-    'window.title':
-      'WebTerminal Minimal${separator}${dirty}${activeEditorShort}',
-  },
+    developmentOptions: {
+        logLevel: LogLevel.Warning,
+    },
+    configurationDefaults: {
+        'window.title':
+            'WebTerminal Minimal${separator}${dirty}${activeEditorShort}',
+    },
 };
 
 const envOptions: EnvironmentOverride = {
-  userHome: vscode.Uri.file('/'),
+    userHome: vscode.Uri.file('/'),
 };
 
 // ---------------------------------------------------------------------------
@@ -238,55 +216,55 @@ const envOptions: EnvironmentOverride = {
 // ---------------------------------------------------------------------------
 
 export interface EditorSetupOptions {
-  container: HTMLElement;
-  userConfiguration?: string;
-  userKeybindings?: string;
+    container: HTMLElement;
+    userConfiguration?: string;
+    userKeybindings?: string;
 }
 
 export async function initializeMonaco(
-  options: EditorSetupOptions,
+    options: EditorSetupOptions,
 ): Promise<void> {
-  if (initialized) return;
+    if (initialized) return;
 
-  await Promise.all([
-    initUserConfiguration(options.userConfiguration ?? defaultConfiguration),
-    initUserKeybindings(options.userKeybindings ?? defaultKeybindings),
-  ]);
+    await Promise.all([
+        initUserConfiguration(options.userConfiguration ?? defaultConfiguration),
+        initUserKeybindings(options.userKeybindings ?? defaultKeybindings),
+    ]);
 
-  setupFileSystem();
-  await createIndexedDBProviders();
+    setupFileSystem();
+    await createIndexedDBProviders();
 
-  const services: IEditorOverrideServices = {
-    ...minimalServices,
-    ...getWorkbenchServiceOverride(),
-    ...getQuickAccessServiceOverride({
-      isKeybindingConfigurationVisible: () => true,
-      shouldUseGlobalPicker: () => true,
-    }),
-  };
+    const services: IEditorOverrideServices = {
+        ...minimalServices,
+        ...getWorkbenchServiceOverride(),
+        ...getQuickAccessServiceOverride({
+            isKeybindingConfigurationVisible: () => true,
+            shouldUseGlobalPicker: () => true,
+        }),
+    };
 
-  console.log('[Minimal Setup] Calling initializeMonacoService...');
-  await initializeMonacoService(
-    services,
-    options.container,
-    constructOptions,
-    envOptions,
-  );
-  console.log('[Minimal Setup] initializeMonacoService resolved');
+    console.log('[Minimal Setup] Calling initializeMonacoService...');
+    await initializeMonacoService(
+        services,
+        options.container,
+        constructOptions,
+        envOptions,
+    );
+    console.log('[Minimal Setup] initializeMonacoService resolved');
 
-  console.log('[Minimal Setup] Registering default extension...');
-  await registerExtension(
-    {
-      name: 'webterminal-minimal',
-      publisher: 'webterminal',
-      version: '1.0.0',
-      engines: { vscode: '*' },
-    },
-    ExtensionHostKind.LocalProcess,
-  ).setAsDefaultApi();
-  console.log('[Minimal Setup] Default extension registered');
+    console.log('[Minimal Setup] Registering default extension...');
+    await registerExtension(
+        {
+            name: 'webterminal-minimal',
+            publisher: 'webterminal',
+            version: '1.0.0',
+            engines: { vscode: '*' },
+        },
+        ExtensionHostKind.LocalProcess,
+    ).setAsDefaultApi();
+    console.log('[Minimal Setup] Default extension registered');
 
-  initialized = true;
+    initialized = true;
 }
 
 export { RegisteredFileSystemProvider, RegisteredMemoryFile, registerFileSystemOverlay };
