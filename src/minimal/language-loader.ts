@@ -37,6 +37,7 @@ const grammarLoaders: Record<string, Loader[]> = {
   jsonc: [
     () => import('@codingame/monaco-vscode-json-default-extension'),
     () => import('@codingame/monaco-vscode-json-language-features-default-extension'),
+    () => import('@codingame/monaco-vscode-configuration-editing-default-extension'),
   ],
   html: [
     () => import('@codingame/monaco-vscode-html-default-extension'),
@@ -111,9 +112,6 @@ const grammarLoaders: Record<string, Loader[]> = {
   vb: [() => import('@codingame/monaco-vscode-vb-default-extension')],
   diff: [() => import('@codingame/monaco-vscode-diff-default-extension')],
   log: [() => import('@codingame/monaco-vscode-log-default-extension')],
-
-  // --- Config editing (settings.json, launch.json, etc.) ---
-  jsonc_config: [() => import('@codingame/monaco-vscode-configuration-editing-default-extension')],
 };
 
 // File-extension fallback for when languageId is generic (e.g., "plaintext")
@@ -192,9 +190,6 @@ async function loadLanguage(langId: string): Promise<void> {
  * Call once after the Monaco workbench is ready.
  */
 export function initLanguageLoader(vscodeApi: typeof import('vscode')): void {
-  // Load config editing support eagerly (needed for settings.json etc.)
-  loadLanguage('jsonc_config');
-
   const handleDocument = (doc: { languageId: string; uri: { path: string } }) => {
     let langId = doc.languageId;
 
