@@ -65,7 +65,7 @@ import '@codingame/monaco-vscode-theme-defaults-default-extension';
 import '@codingame/monaco-vscode-theme-seti-default-extension';
 
 // Required for vscode extension API usage in plugins
-import 'vscode/localExtensionHost';
+// (imported in main.ts entry point to support extension host worker)
 
 // Register SFTP sidebar view (must be before initializeMonacoService)
 // import '@plugins/account/sftp-view';
@@ -153,7 +153,7 @@ function setupFileSystem() {
 const minimalServices: IEditorOverrideServices = {
   ...getLogServiceOverride(),
   ...getFilesServiceOverride(),
-  ...getExtensionServiceOverride({ enableWorkerExtensionHost: true }),
+  ...getExtensionServiceOverride({ enableWorkerExtensionHost: false }),
   ...getModelServiceOverride(),
   ...getNotificationsServiceOverride(),
   ...getDialogsServiceOverride(),
@@ -264,6 +264,7 @@ export async function initializeMonaco(
   );
   console.log('[Minimal Setup] initializeMonacoService resolved');
 
+  console.log('[Minimal Setup] Registering default extension...');
   await registerExtension(
     {
       name: 'webterminal-minimal',
@@ -273,6 +274,7 @@ export async function initializeMonaco(
     },
     ExtensionHostKind.LocalProcess,
   ).setAsDefaultApi();
+  console.log('[Minimal Setup] Default extension registered');
 
   initialized = true;
 }

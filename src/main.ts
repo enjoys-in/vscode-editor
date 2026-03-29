@@ -1,14 +1,27 @@
-import { App } from './app';
+// Required for extension host worker — must be imported unconditionally
+import 'vscode/localExtensionHost';
 
-// Built-in plugins (prebuilt, ready to use)
-import { createThemePlugin } from '@plugins/theme';
-import { createLSPPlugin } from '@plugins/lsp';
-import { createAICompletionPlugin } from '@plugins/ai-completion';
-import { createKeybindingsPlugin } from '@plugins/keybindings';
-import { createWorkspacePlugin } from '@plugins/workspace';
-import { createAccountPlugin } from '@plugins/account';
+// If this page was loaded as an extension host worker iframe, don't boot the app.
+const _searchParams = new URLSearchParams(window.location.search);
+if (!_searchParams.has('vscodeWebWorkerExtHostId')) {
 
-async function main() {
+Promise.all([
+  import('./app'),
+  import('@plugins/theme'),
+  import('@plugins/lsp'),
+  import('@plugins/ai-completion'),
+  import('@plugins/keybindings'),
+  import('@plugins/workspace'),
+  import('@plugins/account'),
+]).then(async ([
+  { App },
+  { createThemePlugin },
+  { createLSPPlugin },
+  { createAICompletionPlugin },
+  { createKeybindingsPlugin },
+  { createWorkspacePlugin },
+  { createAccountPlugin },
+]) => {
   // ---- Create the app ----
   const app = new App({
     container: '#workbench',
@@ -99,6 +112,6 @@ async function main() {
 
   // Expose for console debugging
   (window as any).app = app;
-}
+}).catch(console.error);
 
-main().catch(console.error);
+} // end of extension host worker guard

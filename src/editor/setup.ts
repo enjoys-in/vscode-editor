@@ -95,7 +95,7 @@ import '@codingame/monaco-vscode-configuration-editing-default-extension';
 // import '@codingame/monaco-vscode-emmet-default-extension';
 
 // Required for vscode extension API usage in plugins
-import 'vscode/localExtensionHost';
+// (imported in main.ts entry point to support extension host worker)
 
 // User defaults (imported as raw strings)
 import defaultConfiguration from './user/configuration.json?raw';

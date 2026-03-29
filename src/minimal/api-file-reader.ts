@@ -69,17 +69,27 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
       // -------------------------------------------------------------------
 
       async function fetchFile(filePath: string, sid: string): Promise<string> {
-        const res = await fetch(`${apiBase}/api/file/read`, {
+        const url = `${apiBase}/api/file/read`;
+        const body = { sessionId: sid, path: filePath };
+        console.log('[ApiFileReader] POST', url, body);
+
+        const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: sid, path: filePath }),
+          body: JSON.stringify(body),
         });
 
+        console.log('[ApiFileReader] Response status:', res.status);
+
         if (!res.ok) {
-          throw new Error(`API returned ${res.status}: ${await res.text()}`);
+          const text = await res.text();
+          console.error('[ApiFileReader] Response error body:', text);
+          throw new Error(`API returned ${res.status}: ${text}`);
         }
 
         const data: ApiResponse = await res.json();
+        console.log('[ApiFileReader] Response data:', { status: data.status, message: data.message, resultLength: data.result?.length });
+
         if (!data.status) {
           throw new Error(data.message || 'File read failed');
         }
@@ -92,20 +102,25 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
       // -------------------------------------------------------------------
 
       async function loadFile(filePath: string, sid: string): Promise<void> {
+        console.log('[ApiFileReader] loadFile start:', filePath);
         const content = await fetchFile(filePath, sid);
         const fileName = filePath.split('/').pop() || 'file';
         const vsPath = `${basePath}/${fileName}`;
         const uri = ctx.vscode.Uri.file(vsPath);
+        console.log('[ApiFileReader] Registering file at:', vsPath, '(', content.length, 'bytes)');
 
         try {
           fsProvider.registerFile(new RegisteredMemoryFile(uri, content));
-        } catch {
-          // File already registered
+          console.log('[ApiFileReader] File registered successfully');
+        } catch (e) {
+          console.warn('[ApiFileReader] File already registered or error:', e);
         }
 
         // Open the file in the editor
+        console.log('[ApiFileReader] Opening document...');
         const doc = await ctx.vscode.workspace.openTextDocument(uri);
         await ctx.vscode.window.showTextDocument(doc);
+        console.log('[ApiFileReader] File opened in editor:', vsPath);
       }
 
       // -------------------------------------------------------------------
