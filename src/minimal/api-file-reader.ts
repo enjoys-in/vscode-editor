@@ -75,33 +75,75 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
       const sftp = new SftpSocket(apiBase, sessionId);
       disposables.push({ dispose: () => sftp.disconnect() });
 
+      // ---------------------------------------------------------------
+      // Session-not-found retry loop
+      // Shows a modal dialog with only a "Retry" button when the SFTP
+      // session cannot be found, and keeps retrying until it succeeds.
+      // ---------------------------------------------------------------
+
+      function isSessionError(err: any): boolean {
+        const msg = (err?.message || '').toLowerCase();
+        return msg.includes('session') || msg.includes('not found')
+          || msg.includes('expired') || msg.includes('invalid')
+          || msg.includes('unauthorized') || msg.includes('401')
+          || msg.includes('403') || msg.includes('404');
+      }
+
+      async function retryOnSessionError<T>(fn: () => Promise<T>, label: string): Promise<T> {
+        while (true) {
+          try {
+            return await fn();
+          } catch (err: any) {
+            if (isSessionError(err)) {
+              console.warn(`[ApiFileReader] Session error during ${label}:`, err.message);
+              const detail = `The SFTP session could not be found or has expired.\n\nSession ID: ${sessionId || '(none)'}\nHost: ${params.get('host') || '(unknown)'}\n\nError: ${err.message}`;
+              const choice = await ctx.vscode.window.showErrorMessage(
+                'SFTP Session Not Found',
+                { modal: true, detail },
+                'Retry',
+              );
+              if (choice !== 'Retry') {
+                // User pressed Escape / closed dialog — re-show immediately (loop)
+                continue;
+              }
+              // User clicked Retry — loop back and try again
+              continue;
+            }
+            // Non-session error — just throw
+            throw err;
+          }
+        }
+      }
+
       // Decide: file or directory
       if (isFilePath(remotePath)) {
         console.log('[ApiFileReader] Loading file:', remotePath);
-        Promise.resolve(
-          ctx.vscode.window.withProgress(
+        retryOnSessionError(
+          () => ctx.vscode.window.withProgress(
             {
               location: ctx.vscode.ProgressLocation.Notification,
-              title: `Loading ${remotePath.split('/').pop()}...`,
+              title: `Loading ${remotePath!.split('/').pop()}...`,
               cancellable: false,
             },
             () => loadFile(remotePath!, sessionId),
           ),
+          'loadFile',
         ).catch((err: any) => {
           console.error('[ApiFileReader] Load failed:', err);
           ctx.vscode.window.showErrorMessage(`Failed to load file: ${err.message}`);
         });
       } else {
         console.log('[ApiFileReader] Loading directory:', remotePath);
-        Promise.resolve(
-          ctx.vscode.window.withProgress(
+        retryOnSessionError(
+          () => ctx.vscode.window.withProgress(
             {
               location: ctx.vscode.ProgressLocation.Notification,
-              title: `Loading directory ${remotePath.split('/').pop() || remotePath}...`,
+              title: `Loading directory ${remotePath!.split('/').pop() || remotePath}...`,
               cancellable: false,
             },
             () => loadDirectory(remotePath!, sessionId),
           ),
+          'loadDirectory',
         ).catch((err: any) => {
           console.error('[ApiFileReader] Dir load failed:', err);
           ctx.vscode.window.showErrorMessage(`Failed to load directory: ${err.message}`);
