@@ -170,21 +170,21 @@ export function createWorkspacePlugin(options?: WorkspacePluginOptions): Plugin 
       ctx.services.register('workspace', workspaceService);
 
       // -------------------------------------------------------------------
-      // Commands (accessible from command palette)
+      // Commands (accessible from command palette and status bar)
       // -------------------------------------------------------------------
 
       disposables.push(
-        ctx.registerCommand('workspace.openLocalFolder', () =>
+        ctx.vscode.commands.registerCommand('workspace.openLocalFolder', () =>
           workspaceService.openLocalFolder(),
         ),
       );
       disposables.push(
-        ctx.registerCommand('workspace.uploadFiles', () =>
+        ctx.vscode.commands.registerCommand('workspace.uploadFiles', () =>
           workspaceService.uploadFiles(),
         ),
       );
       disposables.push(
-        ctx.registerCommand('workspace.sftpConnect', async () => {
+        ctx.vscode.commands.registerCommand('workspace.sftpConnect', async () => {
           const host = await ctx.vscode.window.showInputBox({
             prompt: 'SFTP Host',
             placeHolder: 'example.com',
@@ -222,7 +222,7 @@ export function createWorkspacePlugin(options?: WorkspacePluginOptions): Plugin 
         }),
       );
       disposables.push(
-        ctx.registerCommand('workspace.sftpLoadFolder', async () => {
+        ctx.vscode.commands.registerCommand('workspace.sftpLoadFolder', async () => {
           const remotePath = await ctx.vscode.window.showInputBox({
             prompt: 'Remote folder path to load',
             placeHolder: '/home/user/project',
