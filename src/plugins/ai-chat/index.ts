@@ -102,27 +102,42 @@ export function createAIChatPlugin(options?: AIChatOptions): Plugin {
 
       void getApi().then(async (vscodeApi) => {
         let webviewView: any = null;
+        console.log('[AI Chat] Plugin activated, registering webview provider...');
         vscodeApi.window.registerWebviewViewProvider('ai-chat-view', {
           resolveWebviewView(view) {
+            console.log('[AI Chat] resolveWebviewView called');
             webviewView = view;
             webviewView.webview.options = {
               enableScripts: true,
             };
-            webviewView.webview.html = getChatHtml(apiUrl('aiChat'));
+            const chatUrl = apiUrl('aiChat');
+            console.log('[AI Chat] Chat endpoint:', chatUrl);
+            webviewView.webview.html = getChatHtml(chatUrl);
+            console.log('[AI Chat] Webview HTML set, length:', webviewView.webview.html.length);
 
             // Handle messages from webview
             webviewView.webview.onDidReceiveMessage(async (msg: any) => {
+              console.log('[AI Chat] Received from webview:', msg.type, msg);
               if (msg.type === 'getProviders') {
                 try {
-                  const res = await fetch(apiUrl('aiProviders'));
+                  const provUrl = apiUrl('aiProviders');
+                  console.log('[AI Chat] Fetching providers from:', provUrl);
+                  const res = await fetch(provUrl);
                   const data = await res.json();
+                  console.log('[AI Chat] Providers response:', data);
                   if (data.success) {
                     webviewView.webview.postMessage({
                       type: 'providers',
                       data: data.data,
                     });
+                  } else {
+                    webviewView.webview.postMessage({
+                      type: 'error',
+                      message: `Provider API returned success=false: ${JSON.stringify(data)}`,
+                    });
                   }
                 } catch (err: any) {
+                  console.error('[AI Chat] Failed to fetch providers:', err);
                   webviewView.webview.postMessage({
                     type: 'error',
                     message: `Failed to fetch providers: ${err.message}`,
@@ -134,6 +149,7 @@ export function createAIChatPlugin(options?: AIChatOptions): Plugin {
                 const editor = vscodeApi.window.activeTextEditor;
                 const selection = editor?.selection;
                 const doc = editor?.document;
+                console.log('[AI Chat] getEditorContext: editor=', !!editor, 'doc=', !!doc);
                 webviewView.webview.postMessage({
                   type: 'editorContext',
                   data: {
@@ -437,7 +453,12 @@ export function createAIChatPlugin(options?: AIChatOptions): Plugin {
 
 function getChatHtml(chatEndpoint: string): string {
   // Extract origin for CSP connect-src
-  const apiOrigin = new URL(chatEndpoint).origin;
+  let apiOrigin: string;
+  try {
+    apiOrigin = new URL(chatEndpoint).origin;
+  } catch {
+    apiOrigin = '*';
+  }
   // Replace the placeholder in the script with the actual endpoint
   const script = chatScript.replace('__CHAT_ENDPOINT__', JSON.stringify(chatEndpoint));
   return /* html */ `<!DOCTYPE html>
@@ -445,7 +466,6 @@ function getChatHtml(chatEndpoint: string): string {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src ${apiOrigin} ws: wss:;">
 <style>
 ${chatStyles}
 </style>

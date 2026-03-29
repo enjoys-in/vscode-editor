@@ -1,5 +1,25 @@
-const vscode = acquireVsCodeApi();
+// --- Global error handler ---
+window.onerror = function(msg, src, line, col, err) {
+  console.error('[AI Chat WebView] Error:', msg, 'at', src, line, col, err);
+  var errDiv = document.getElementById('_debug');
+  if (errDiv) errDiv.textContent += '\n[ERR] ' + msg + ' L' + line;
+};
+
+console.log('[AI Chat WebView] Script starting...');
+console.log('[AI Chat WebView] CHAT_ENDPOINT placeholder check...');
+
+var vscode;
+try {
+  vscode = acquireVsCodeApi();
+  console.log('[AI Chat WebView] acquireVsCodeApi OK');
+} catch(e) {
+  console.error('[AI Chat WebView] acquireVsCodeApi FAILED:', e);
+  document.body.innerHTML = '<div style="color:red;padding:20px;">acquireVsCodeApi failed: ' + e.message + '</div>';
+  throw e;
+}
+
 const CHAT_ENDPOINT = __CHAT_ENDPOINT__;
+console.log('[AI Chat WebView] CHAT_ENDPOINT:', CHAT_ENDPOINT);
 
 let providers = [];
 let selectedProviderId = '';
@@ -29,11 +49,20 @@ const clearBtn = document.getElementById('clear-btn');
 const chipsEl = document.getElementById('context-chips');
 const dropdownEl = document.getElementById('file-dropdown');
 
+console.log('[AI Chat WebView] DOM elements:', {
+  providerSelect: !!providerSelect, modelSelect: !!modelSelect,
+  messagesEl: !!messagesEl, welcomeEl: !!welcomeEl,
+  inputEl: !!inputEl, sendBtn: !!sendBtn,
+  sendIcon: !!sendIcon, sendLabel: !!sendLabel,
+  clearBtn: !!clearBtn
+});
+
 // SVG icons
 const ICON_SEND = '<svg viewBox="0 0 16 16"><path d="M1 1.5l14 6.5-14 6.5V9l10-1-10-1V1.5z"/></svg>';
 const ICON_STOP = '<svg viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>';
 
 // --- Init ---
+console.log('[AI Chat WebView] Posting init messages...');
 vscode.postMessage({ type: 'getProviders' });
 vscode.postMessage({ type: 'getWorkspaceFiles' });
 
@@ -48,6 +77,7 @@ document.querySelectorAll('.hint').forEach(h => {
 // --- Message from extension host ---
 window.addEventListener('message', (e) => {
   const msg = e.data;
+  console.log('[AI Chat WebView] Received message:', msg.type, msg);
   if (msg.type === 'providers') {
     providers = msg.data.filter(p => p.available);
     renderProviders();
@@ -102,6 +132,7 @@ window.addEventListener('message', (e) => {
 
 // --- Provider/Model selectors ---
 function renderProviders() {
+  console.log('[AI Chat WebView] renderProviders called, providers:', providers.length, providers);
   providerSelect.innerHTML = providers.map(p =>
     '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'
   ).join('');
@@ -110,6 +141,7 @@ function renderProviders() {
     providerSelect.value = saved.providerId;
   }
   selectedProviderId = providerSelect.value;
+  console.log('[AI Chat WebView] selectedProviderId:', selectedProviderId);
   renderModels();
 }
 
@@ -136,12 +168,17 @@ function saveState() { vscode.setState({ providerId: selectedProviderId, modelId
 
 // --- Restore ---
 (function restore() {
-  const s = getState();
-  if (s.history && s.history.length) {
-    history = s.history;
-    welcomeEl.style.display = 'none';
-    history.forEach(m => appendMessage(m.role, m.content, false));
-    scrollToBottom();
+  try {
+    const s = getState();
+    console.log('[AI Chat WebView] Restoring state:', s ? Object.keys(s) : 'empty');
+    if (s.history && s.history.length) {
+      history = s.history;
+      welcomeEl.style.display = 'none';
+      history.forEach(m => appendMessage(m.role, m.content, false));
+      scrollToBottom();
+    }
+  } catch(e) {
+    console.error('[AI Chat WebView] Restore failed:', e);
   }
 })();
 
@@ -326,6 +363,7 @@ let applyIdCounter = 0;
 
 function requestSend() {
   const text = inputEl.value.trim();
+  console.log('[AI Chat WebView] requestSend called, text:', text, 'isStreaming:', isStreaming);
   if (!text || isStreaming) return;
   inputEl.value = '';
   autoResize();
@@ -334,11 +372,13 @@ function requestSend() {
   window._pendingFiles = [...attachedFiles];
   attachedFiles = [];
   renderChips();
+  console.log('[AI Chat WebView] Posting getEditorContext...');
   vscode.postMessage({ type: 'getEditorContext' });
 }
 
 function sendChat(editorCtx) {
   const question = window._pendingQuestion || '';
+  console.log('[AI Chat WebView] sendChat called, question:', question, 'ctx:', editorCtx);
   if (!question) return;
   const files = window._pendingFiles || [];
   window._pendingQuestion = null;
@@ -359,6 +399,8 @@ function sendChat(editorCtx) {
 }
 
 async function streamResponse(question, ctx, files) {
+  console.log('[AI Chat WebView] streamResponse called');
+  console.log('[AI Chat WebView] CHAT_ENDPOINT:', CHAT_ENDPOINT);
   isStreaming = true;
   sendIcon.innerHTML = ICON_STOP;
   sendLabel.textContent = 'Stop';
@@ -373,24 +415,28 @@ async function streamResponse(question, ctx, files) {
     .filter(f => f.content)
     .map(f => ({ path: f.path, language: f.language || 'plaintext', content: f.content.slice(0, 8000) }));
 
+  const body = {
+    question,
+    language: ctx.language || 'plaintext',
+    fileName: ctx.fileName || '',
+    context: (ctx.context || '').slice(0, 4000),
+    selection: (ctx.selection || '').slice(0, 2000),
+    fileContext,
+    providerId: selectedProviderId,
+    modelId: selectedModelId,
+    history: history.slice(0, -1).slice(-20),
+  };
+  console.log('[AI Chat WebView] Sending fetch to:', CHAT_ENDPOINT, 'body keys:', Object.keys(body));
+
   try {
     const res = await fetch(CHAT_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: abortController.signal,
-      body: JSON.stringify({
-        question,
-        language: ctx.language || 'plaintext',
-        fileName: ctx.fileName || '',
-        context: (ctx.context || '').slice(0, 4000),
-        selection: (ctx.selection || '').slice(0, 2000),
-        fileContext,
-        providerId: selectedProviderId,
-        modelId: selectedModelId,
-        history: history.slice(0, -1).slice(-20),
-      }),
+      body: JSON.stringify(body),
     });
 
+    console.log('[AI Chat WebView] Fetch response:', res.status, res.statusText);
     if (!res.ok) throw new Error((await res.text()) || 'HTTP ' + res.status);
 
     const reader = res.body.getReader();
@@ -417,6 +463,7 @@ async function streamResponse(question, ctx, files) {
       }
     }
   } catch (err) {
+    console.error('[AI Chat WebView] Stream error:', err);
     if (err.name === 'AbortError') full += '\n\n*\u2014 Stopped*';
     else full = '**Error:** ' + err.message;
   }
@@ -435,6 +482,7 @@ async function streamResponse(question, ctx, files) {
 
 // --- Buttons ---
 sendBtn.addEventListener('click', () => {
+  console.log('[AI Chat WebView] Send button clicked, isStreaming:', isStreaming);
   if (isStreaming && abortController) abortController.abort();
   else requestSend();
 });
@@ -632,3 +680,5 @@ function bindCodeBlockActions(container) {
     });
   });
 }
+
+console.log('[AI Chat WebView] Script fully loaded and ready.');
