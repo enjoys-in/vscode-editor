@@ -1,0 +1,14 @@
+{
+  "workbench.colorTheme": "Default Dark+",
+  "workbench.iconTheme": "vs-seti",
+  "editor.fontSize": 14,
+  "editor.fontFamily": "'Fira Code', 'Cascadia Code', Consolas, monospace",
+  "editor.tabSize": 2,
+  "editor.minimap.enabled": false,
+  "editor.smoothScrolling": true,
+  "editor.cursorBlinking": "smooth",
+  "editor.scrollBeyondLastLine": false,
+  "editor.renderWhitespace": "none",
+  "files.autoSave": "off",
+  "workbench.sideBar.location": "left"
+}
