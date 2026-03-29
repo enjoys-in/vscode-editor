@@ -16,6 +16,7 @@ async function main() {
   // AI completion — inline suggestions
   app.registerPlugin(
     createAICompletionPlugin({
+        
       // endpoint: 'https://api.openai.com/v1/chat/completions',
       // apiKey: 'YOUR_KEY',
     }),

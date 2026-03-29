@@ -8,12 +8,12 @@ import {
 // ---------------------------------------------------------------------------
 // API File Reader Plugin
 //
-// Reads a remote directory via POST /api/file/read using:
-//   - sessionId from URL query ?sessionId= (or defaults to empty)
+// Reads a remote file via POST /api/file/read using:
+//   - sessionId from URL query ?tabId= (or defaults to empty)
 //   - path from URL query ?path=
 //
-// On activation, fetches the file tree and loads all files into the
-// virtual filesystem so explorer, editor, search all work.
+// On activation, fetches the file and loads it into the virtual filesystem
+// so explorer, editor, search all work.
 // ---------------------------------------------------------------------------
 
 export interface ApiFileReaderOptions {
@@ -49,9 +49,6 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
       const remotePath = params.get('path');
       const sessionId = params.get('tabId') ?? '';
 
-      console.log('[ApiFileReader] URL:', window.location.href);
-      console.log('[ApiFileReader] sessionId:', sessionId, 'path:', remotePath);
-
       if (!remotePath) {
         console.log('[ApiFileReader] No ?path= query param, skipping auto-load');
         return;
@@ -69,27 +66,17 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
       // -------------------------------------------------------------------
 
       async function fetchFile(filePath: string, sid: string): Promise<string> {
-        const url = `${apiBase}/api/file/read`;
-        const body = { sessionId: sid, path: filePath };
-        console.log('[ApiFileReader] POST', url, body);
-
-        const res = await fetch(url, {
+        const res = await fetch(`${apiBase}/api/file/read`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ sessionId: sid, path: filePath }),
         });
 
-        console.log('[ApiFileReader] Response status:', res.status);
-
         if (!res.ok) {
-          const text = await res.text();
-          console.error('[ApiFileReader] Response error body:', text);
-          throw new Error(`API returned ${res.status}: ${text}`);
+          throw new Error(`API returned ${res.status}: ${await res.text()}`);
         }
 
         const data: ApiResponse = await res.json();
-        console.log('[ApiFileReader] Response data:', { status: data.status, message: data.message, resultLength: data.result?.length });
-
         if (!data.status) {
           throw new Error(data.message || 'File read failed');
         }
@@ -102,26 +89,66 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
       // -------------------------------------------------------------------
 
       async function loadFile(filePath: string, sid: string): Promise<void> {
-        console.log('[ApiFileReader] loadFile start:', filePath);
         const content = await fetchFile(filePath, sid);
         const fileName = filePath.split('/').pop() || 'file';
         const vsPath = `${basePath}/${fileName}`;
         const uri = ctx.vscode.Uri.file(vsPath);
-        console.log('[ApiFileReader] Registering file at:', vsPath, '(', content.length, 'bytes)');
 
         try {
           fsProvider.registerFile(new RegisteredMemoryFile(uri, content));
-          console.log('[ApiFileReader] File registered successfully');
-        } catch (e) {
-          console.warn('[ApiFileReader] File already registered or error:', e);
+        } catch {
+          // File already registered
         }
 
-        // Open the file in the editor
-        console.log('[ApiFileReader] Opening document...');
         const doc = await ctx.vscode.workspace.openTextDocument(uri);
         await ctx.vscode.window.showTextDocument(doc);
-        console.log('[ApiFileReader] File opened in editor:', vsPath);
+        console.log('[ApiFileReader] Opened:', vsPath);
       }
+
+      // -------------------------------------------------------------------
+      // Save file back to remote via API
+      // -------------------------------------------------------------------
+
+      async function saveFile(filePath: string, sid: string, content: string): Promise<void> {
+        const res = await fetch(`${apiBase}/api/file/write`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: sid, path: filePath, content }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`API returned ${res.status}: ${await res.text()}`);
+        }
+
+        const data: ApiResponse = await res.json();
+        if (!data.status) {
+          throw new Error(data.message || 'File write failed');
+        }
+      }
+
+      // Intercept save — when the document is saved, push content to the API
+      disposables.push(
+        ctx.vscode.workspace.onWillSaveTextDocument((e) => {
+          const doc = e.document;
+          const fileName = remotePath!.split('/').pop() || 'file';
+          const expectedPath = `${basePath}/${fileName}`;
+
+          if (doc.uri.path === expectedPath) {
+            e.waitUntil(
+              saveFile(remotePath!, sessionId, doc.getText())
+                .then(() => {
+                  console.log('[ApiFileReader] Saved:', remotePath);
+                  return [] as any;
+                })
+                .catch((err) => {
+                  console.error('[ApiFileReader] Save failed:', err);
+                  ctx.vscode.window.showErrorMessage(`Save failed: ${err.message}`);
+                  return [] as any;
+                }),
+            );
+          }
+        }),
+      );
 
       // -------------------------------------------------------------------
       // Expose service for manual use
@@ -132,6 +159,8 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
           loadFile(path, sid ?? sessionId),
         fetchFile: (path: string, sid?: string) =>
           fetchFile(path, sid ?? sessionId),
+        saveFile: (path: string, content: string, sid?: string) =>
+          saveFile(path, sid ?? sessionId, content),
       });
 
       // -------------------------------------------------------------------

@@ -90,6 +90,35 @@ export function createAccountPlugin(): Plugin {
       void getApi().then(async (vscodeApi) => {
         onDidChangeEmitter = new vscodeApi.EventEmitter<SftpTreeItem | undefined>();
 
+        // Register commands using the extension's own API so tree view items can find them
+        disposables.push(vscodeApi.commands.registerCommand('account.login', () => loginFlow()));
+        disposables.push(vscodeApi.commands.registerCommand('account.logout', () => doLogout()));
+        disposables.push(vscodeApi.commands.registerCommand('account.menu', () => accountMenu()));
+        disposables.push(vscodeApi.commands.registerCommand('account.addProfile', () => addProfileFlow()));
+        disposables.push(vscodeApi.commands.registerCommand('account.deleteProfile', (p?: ConnectionProfile) => deleteProfileFlow(p)));
+        disposables.push(vscodeApi.commands.registerCommand('account.connectProfile', (p: ConnectionProfile) => connectToProfile(p)));
+        disposables.push(vscodeApi.commands.registerCommand('account.disconnect', () => {
+          const workspace = ctx.services.get<any>('workspace');
+          workspace?.sftpDisconnect();
+          connectedProfile = null;
+          refreshTree();
+          ctx.vscode.window.showInformationMessage('SFTP disconnected.');
+        }));
+        disposables.push(vscodeApi.commands.registerCommand('account.loadRemoteFolder', async () => {
+          const workspace = ctx.services.get<any>('workspace');
+          if (!workspace?.sftpConnected) {
+            ctx.vscode.window.showErrorMessage('Not connected to SFTP.');
+            return;
+          }
+          const remotePath = await ctx.vscode.window.showInputBox({
+            prompt: 'Remote folder path to load',
+            placeHolder: '/home/user/project',
+          });
+          if (remotePath) {
+            await workspace.sftpLoadFolder(remotePath);
+          }
+        }));
+
         function getTreeItems(): SftpTreeItem[] {
           const items: SftpTreeItem[] = [];
 
@@ -482,38 +511,6 @@ export function createAccountPlugin(): Plugin {
         ctx.vscode.window.showInformationMessage(`Connection "${profile.label}" deleted.`);
         refreshTree();
       }
-
-      // ---------------------------------------------------------------
-      // Register commands
-      // ---------------------------------------------------------------
-
-      disposables.push(ctx.registerCommand('account.login', () => loginFlow()));
-      disposables.push(ctx.registerCommand('account.logout', () => doLogout()));
-      disposables.push(ctx.registerCommand('account.menu', () => accountMenu()));
-      disposables.push(ctx.registerCommand('account.addProfile', () => addProfileFlow()));
-      disposables.push(ctx.registerCommand('account.deleteProfile', (p?: ConnectionProfile) => deleteProfileFlow(p)));
-      disposables.push(ctx.registerCommand('account.connectProfile', (p: ConnectionProfile) => connectToProfile(p)));
-      disposables.push(ctx.registerCommand('account.disconnect', () => {
-        const workspace = ctx.services.get<any>('workspace');
-        workspace?.sftpDisconnect();
-        connectedProfile = null;
-        refreshTree();
-        ctx.vscode.window.showInformationMessage('SFTP disconnected.');
-      }));
-      disposables.push(ctx.registerCommand('account.loadRemoteFolder', async () => {
-        const workspace = ctx.services.get<any>('workspace');
-        if (!workspace?.sftpConnected) {
-          ctx.vscode.window.showErrorMessage('Not connected to SFTP.');
-          return;
-        }
-        const remotePath = await ctx.vscode.window.showInputBox({
-          prompt: 'Remote folder path to load',
-          placeHolder: '/home/user/project',
-        });
-        if (remotePath) {
-          await workspace.sftpLoadFolder(remotePath);
-        }
-      }));
 
       // ---------------------------------------------------------------
       // Register service
