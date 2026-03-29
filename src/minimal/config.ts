@@ -6,7 +6,7 @@
 
 export const API_CONFIG = {
   /** Base URL for all backend API calls */
-  baseUrl: 'http://localhost:7145',
+  baseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:7145',
 
   /** Endpoints (relative to baseUrl) */
   endpoints: {
