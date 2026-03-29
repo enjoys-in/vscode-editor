@@ -63,18 +63,7 @@ import getExtensionGalleryServiceOverride from '@codingame/monaco-vscode-extensi
 import '@codingame/monaco-vscode-theme-defaults-default-extension';
 import '@codingame/monaco-vscode-theme-seti-default-extension';
 
-// Language grammars — syntax highlighting + language detection
-import '@codingame/monaco-vscode-typescript-basics-default-extension';
-import '@codingame/monaco-vscode-javascript-default-extension';
-import '@codingame/monaco-vscode-json-default-extension';
-import '@codingame/monaco-vscode-css-default-extension';
-import '@codingame/monaco-vscode-html-default-extension';
-import '@codingame/monaco-vscode-markdown-basics-default-extension';
-import '@codingame/monaco-vscode-python-default-extension';
-import '@codingame/monaco-vscode-shellscript-default-extension';
-import '@codingame/monaco-vscode-yaml-default-extension';
-import '@codingame/monaco-vscode-xml-default-extension';
-import '@codingame/monaco-vscode-configuration-editing-default-extension';
+// Language grammars are loaded lazily on demand — see language-loader.ts
 
 // Required for vscode extension API usage in plugins
 // (imported in main.ts entry point to support extension host worker)

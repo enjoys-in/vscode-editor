@@ -5,6 +5,7 @@ import { createAccountPlugin } from '@plugins/account';
 import { createAIChatPlugin } from '@plugins/ai-chat';
 import { createApiFileReaderPlugin } from './api-file-reader';
 import { enableVsixDragAndDrop } from './extension-loader';
+import { initLanguageLoader } from './language-loader';
 
 async function main() {
   console.log('[Minimal] Starting...', Date.now());
@@ -30,6 +31,10 @@ async function main() {
 
   await app.boot();
   console.log('[Minimal] Boot complete, all plugins activated');
+
+  // Lazy-load language grammars when files are opened
+  const vscode = await import('vscode');
+  initLanguageLoader(vscode);
 
   // Drag-and-drop .vsix to install extensions
   enableVsixDragAndDrop(document.body);
