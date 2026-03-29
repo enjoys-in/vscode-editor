@@ -26,15 +26,15 @@ body{
   display:flex;gap:10px;
   padding:12px 16px;
 }
-.msg+.msg{border-top:1px solid var(--vscode-widget-border,transparent);}
+.msg+.msg{border-top:1px solid var(--vscode-panel-border,var(--vscode-widget-border,rgba(255,255,255,.06)));}
 
 /* Avatar */
 .msg .avatar{
-  flex-shrink:0;width:28px;height:28px;
+  flex-shrink:0;width:26px;height:26px;
   border-radius:50%;
   display:flex;align-items:center;justify-content:center;
-  font-size:14px;line-height:1;
-  margin-top:1px;
+  font-size:13px;line-height:1;
+  margin-top:2px;
 }
 .msg.user .avatar{
   background:var(--vscode-button-background,#0e639c);
@@ -48,14 +48,17 @@ body{
 /* Body */
 .msg .body{flex:1;min-width:0;}
 .msg .name{
-  font-size:12px;font-weight:600;
-  margin-bottom:4px;
+  font-size:11px;font-weight:600;
+  margin-bottom:3px;
   color:var(--vscode-foreground,#ccc);
+  text-transform:uppercase;
+  letter-spacing:.3px;
 }
 .msg .name span{
   font-weight:400;
   color:var(--vscode-descriptionForeground,#888);
-  margin-left:6px;font-size:11px;
+  margin-left:6px;font-size:10px;
+  text-transform:none;letter-spacing:0;
 }
 
 /* Content prose */
@@ -72,15 +75,15 @@ body{
   font-family:var(--vscode-editor-font-family,'Cascadia Code',Consolas,'Courier New',monospace);
   font-size:calc(var(--vscode-editor-font-size,13px) - 1px);
   background:var(--vscode-textCodeBlock-background,rgba(255,255,255,.06));
-  padding:2px 5px;border-radius:3px;
+  padding:1px 4px;border-radius:3px;
 }
 
 /* ===== Code blocks ===== */
 .code-block{
   margin:8px 0;
-  border-radius:6px;
+  border-radius:4px;
   overflow:hidden;
-  border:1px solid var(--vscode-widget-border,rgba(255,255,255,.08));
+  border:1px solid var(--vscode-panel-border,var(--vscode-widget-border,rgba(255,255,255,.08)));
   background:var(--vscode-editor-background,#1e1e1e);
   transition:border-color .3s;
 }
@@ -92,40 +95,58 @@ body{
   border-color:var(--vscode-errorForeground,#f14c4c);
   animation:flash-red .6s ease;
 }
-@keyframes flash-green{0%{background:rgba(115,201,145,.15);}100%{background:transparent;}}
-@keyframes flash-red{0%{background:rgba(241,76,76,.12);}100%{background:transparent;}}
+.code-block.undone{
+  border-color:var(--vscode-editorWarning-foreground,#cca700);
+  animation:flash-yellow .6s ease;
+}
+@keyframes flash-green{0%{background:rgba(115,201,145,.12);}100%{background:transparent;}}
+@keyframes flash-red{0%{background:rgba(241,76,76,.1);}100%{background:transparent;}}
+@keyframes flash-yellow{0%{background:rgba(204,167,0,.1);}100%{background:transparent;}}
 
+/* Code bar header */
 .code-block .code-bar{
   display:flex;align-items:center;justify-content:space-between;
-  padding:4px 10px;
-  background:var(--vscode-editorGroupHeader-tabsBackground,rgba(255,255,255,.04));
-  border-bottom:1px solid var(--vscode-widget-border,rgba(255,255,255,.06));
+  padding:3px 8px;
+  background:var(--vscode-editorGroupHeader-tabsBackground,rgba(255,255,255,.03));
+  border-bottom:1px solid var(--vscode-panel-border,var(--vscode-widget-border,rgba(255,255,255,.06)));
 }
 .code-block .code-lang{
-  font-size:11px;
+  font-size:10px;
   color:var(--vscode-descriptionForeground,#888);
-  text-transform:uppercase;letter-spacing:.3px;
+  text-transform:uppercase;letter-spacing:.4px;
+  font-weight:500;
 }
-.code-block .code-actions{display:flex;gap:2px;}
+
+/* Code action buttons */
+.code-block .code-actions{display:flex;gap:1px;}
 .code-block .code-actions button{
   background:none;border:none;cursor:pointer;
   color:var(--vscode-descriptionForeground,#888);
-  font-size:11px;padding:2px 7px;border-radius:3px;
+  font-size:11px;padding:2px 6px;border-radius:3px;
   font-family:var(--vscode-font-family,sans-serif);
   display:flex;align-items:center;gap:3px;
   transition:all .12s;
+  white-space:nowrap;
 }
 .code-block .code-actions button:hover{
-  background:var(--vscode-toolbar-hoverBackground,rgba(255,255,255,.12));
+  background:var(--vscode-toolbar-hoverBackground,rgba(255,255,255,.1));
   color:var(--vscode-foreground,#ccc);
 }
-.code-block .code-actions .act-apply:hover{color:var(--vscode-testing-iconPassed,#73c991);}
+.code-block .code-actions .act-accept:hover{color:var(--vscode-testing-iconPassed,#73c991);}
+.code-block .code-actions .act-undo{display:none;}
+.code-block .code-actions .act-undo:hover{color:var(--vscode-editorWarning-foreground,#cca700);}
 .code-block .code-actions .act-insert:hover{color:var(--vscode-notificationsInfoIcon-foreground,#75beff);}
+.code-block .code-actions .act-copy:hover{color:var(--vscode-foreground,#ccc);}
 .code-block .code-actions .act-newfile:hover{color:var(--vscode-notificationsInfoIcon-foreground,#75beff);}
 .code-block .code-actions .act-dismiss:hover{color:var(--vscode-errorForeground,#f14c4c);}
 
+/* Show undo after apply */
+.code-block.applied .act-undo{display:flex;}
+.code-block.applied .act-accept{display:none;}
+
+/* Code content */
 .code-block pre{
-  margin:0;padding:10px 12px;
+  margin:0;padding:8px 10px;
   overflow-x:auto;
   font-family:var(--vscode-editor-font-family,'Cascadia Code',Consolas,monospace);
   font-size:var(--vscode-editor-font-size,13px);
@@ -133,6 +154,74 @@ body{
   background:transparent;
 }
 .code-block pre code{background:none;padding:0;font-size:inherit;}
+
+/* ===== Diff view ===== */
+.diff-view{
+  margin:0;padding:0;
+  font-family:var(--vscode-editor-font-family,'Cascadia Code',Consolas,monospace);
+  font-size:var(--vscode-editor-font-size,13px);
+  line-height:1.45;
+  overflow-x:auto;
+}
+.diff-view .diff-line{
+  padding:0 10px;
+  white-space:pre;
+  min-height:1.45em;
+}
+.diff-view .diff-add{
+  background:var(--vscode-diffEditor-insertedTextBackground,rgba(155,185,85,.2));
+  color:var(--vscode-foreground,#ccc);
+}
+.diff-view .diff-add::before{
+  content:'+';
+  display:inline-block;
+  width:16px;
+  color:var(--vscode-testing-iconPassed,#73c991);
+  font-weight:700;
+}
+.diff-view .diff-del{
+  background:var(--vscode-diffEditor-removedTextBackground,rgba(255,0,0,.18));
+  color:var(--vscode-foreground,#ccc);
+  text-decoration:line-through;
+  opacity:.7;
+}
+.diff-view .diff-del::before{
+  content:'-';
+  display:inline-block;
+  width:16px;
+  color:var(--vscode-errorForeground,#f14c4c);
+  font-weight:700;
+}
+.diff-view .diff-ctx{
+  color:var(--vscode-descriptionForeground,#888);
+  padding:0 10px;
+  white-space:pre;
+}
+.diff-view .diff-ctx::before{
+  content:' ';
+  display:inline-block;
+  width:16px;
+}
+
+/* Diff / Code toggle */
+.code-block .view-toggle{
+  display:flex;gap:0;
+  margin-left:4px;
+}
+.code-block .view-toggle button{
+  background:none;border:1px solid var(--vscode-panel-border,rgba(255,255,255,.1));
+  color:var(--vscode-descriptionForeground,#888);
+  font-size:10px;padding:1px 6px;cursor:pointer;
+  font-family:var(--vscode-font-family,sans-serif);
+  transition:all .1s;
+}
+.code-block .view-toggle button:first-child{border-radius:3px 0 0 3px;}
+.code-block .view-toggle button:last-child{border-radius:0 3px 3px 0;border-left:none;}
+.code-block .view-toggle button.active{
+  background:var(--vscode-button-background,#0e639c);
+  color:var(--vscode-button-foreground,#fff);
+  border-color:var(--vscode-button-background,#0e639c);
+}
 
 /* Streaming cursor */
 .cursor{
@@ -150,11 +239,12 @@ body{
   height:100%;padding:24px 20px;
 }
 .welcome-icon{
-  font-size:32px;
+  width:36px;height:36px;
   color:var(--vscode-activityBarBadge-background,#007acc);
 }
+.welcome-icon svg{width:100%;height:100%;fill:currentColor;}
 .welcome h3{
-  font-size:15px;font-weight:600;
+  font-size:14px;font-weight:600;
   color:var(--vscode-foreground,#ccc);
 }
 .welcome p{
@@ -163,19 +253,19 @@ body{
   max-width:280px;line-height:1.5;
 }
 .welcome .hints{
-  display:flex;flex-direction:column;gap:6px;
+  display:flex;flex-direction:column;gap:5px;
   width:100%;max-width:280px;margin-top:4px;
 }
 .welcome .hint{
-  padding:8px 12px;border-radius:6px;cursor:pointer;
+  padding:7px 10px;border-radius:4px;cursor:pointer;
   font-size:12px;text-align:left;
   background:var(--vscode-input-background,#3c3c3c);
   color:var(--vscode-foreground,#ccc);
-  border:1px solid var(--vscode-widget-border,rgba(255,255,255,.08));
-  transition:background .15s;
+  border:1px solid var(--vscode-panel-border,var(--vscode-widget-border,rgba(255,255,255,.06)));
+  transition:all .12s;
 }
 .welcome .hint:hover{
-  background:var(--vscode-list-hoverBackground,rgba(255,255,255,.06));
+  background:var(--vscode-list-hoverBackground,rgba(255,255,255,.04));
   border-color:var(--vscode-focusBorder,#007fd4);
 }
 
@@ -193,7 +283,7 @@ body{
   font-size:11px;
   background:var(--vscode-badge-background,#4d4d4d);
   color:var(--vscode-badge-foreground,#fff);
-  border:1px solid var(--vscode-widget-border,rgba(255,255,255,.08));
+  border:1px solid var(--vscode-panel-border,var(--vscode-widget-border,rgba(255,255,255,.06)));
   max-width:180px;
 }
 .file-chip .chip-name{
@@ -217,7 +307,7 @@ body{
   max-height:200px;overflow-y:auto;
   background:var(--vscode-dropdown-background,#3c3c3c);
   border:1px solid var(--vscode-dropdown-border,rgba(255,255,255,.12));
-  border-radius:6px;
+  border-radius:4px;
   margin-bottom:4px;
   box-shadow:0 -4px 12px rgba(0,0,0,.35);
   display:none;
@@ -225,7 +315,7 @@ body{
 }
 .file-dropdown.visible{display:block;}
 .file-dropdown .dd-item{
-  padding:6px 10px;
+  padding:5px 10px;
   font-size:12px;
   cursor:pointer;
   display:flex;align-items:center;gap:6px;
@@ -239,8 +329,9 @@ body{
 }
 .file-dropdown .dd-item .dd-icon{
   color:var(--vscode-descriptionForeground,#888);
-  font-size:14px;flex-shrink:0;
+  font-size:13px;flex-shrink:0;
 }
+.file-dropdown .dd-item .dd-icon svg{width:14px;height:14px;fill:currentColor;}
 .file-dropdown .dd-item .dd-path{
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
@@ -250,15 +341,15 @@ body{
   color:var(--vscode-descriptionForeground,#888);
 }
 
-/* ===== Input area (Copilot style) ===== */
+/* ===== Input area ===== */
 .input-wrap{
   flex-shrink:0;
-  padding:0 12px 12px;
+  padding:0 10px 10px;
   position:relative;
 }
 .input-box{
-  border:1px solid var(--vscode-input-border,rgba(255,255,255,.1));
-  border-radius:8px;
+  border:1px solid var(--vscode-input-border,var(--vscode-panel-border,rgba(255,255,255,.1)));
+  border-radius:6px;
   background:var(--vscode-input-background,#3c3c3c);
   overflow:hidden;
   transition:border-color .15s;
@@ -274,34 +365,37 @@ body{
   font-family:var(--vscode-font-family,sans-serif);
   font-size:var(--vscode-font-size,13px);
   line-height:1.45;
-  padding:10px 12px 4px;
-  min-height:24px;max-height:150px;
+  padding:8px 10px 4px;
+  min-height:22px;max-height:150px;
 }
 .input-box textarea::placeholder{color:var(--vscode-input-placeholderForeground,#888);}
 
-/* Toolbar row below textarea */
+/* Toolbar row */
 .input-toolbar{
   display:flex;align-items:center;
   justify-content:space-between;
-  padding:4px 8px 6px;gap:4px;
+  padding:3px 6px 5px;gap:4px;
 }
 .input-toolbar .left{display:flex;align-items:center;gap:2px;}
 .input-toolbar .right{display:flex;align-items:center;gap:4px;}
 
-/* Model selector chip */
+/* Model selector */
 .model-chip{
-  display:flex;align-items:center;gap:4px;
-  padding:2px 8px 2px 6px;border-radius:4px;cursor:pointer;
+  display:flex;align-items:center;gap:3px;
+  padding:2px 6px;border-radius:3px;cursor:pointer;
   font-size:11px;
   color:var(--vscode-descriptionForeground,#888);
-  background:var(--vscode-toolbar-hoverBackground,rgba(255,255,255,.06));
+  background:transparent;
   border:1px solid transparent;
   transition:all .12s;
 }
 .model-chip:hover{
   color:var(--vscode-foreground,#ccc);
-  border-color:var(--vscode-widget-border,rgba(255,255,255,.12));
+  background:var(--vscode-toolbar-hoverBackground,rgba(255,255,255,.06));
+  border-color:var(--vscode-panel-border,rgba(255,255,255,.08));
 }
+.model-chip .chip-icon{display:flex;align-items:center;}
+.model-chip .chip-icon svg{width:12px;height:12px;fill:currentColor;}
 .model-chip select{
   appearance:none;-webkit-appearance:none;
   background:none;border:none;outline:none;
@@ -317,31 +411,32 @@ body{
 .tool-btn{
   background:none;border:none;cursor:pointer;
   color:var(--vscode-descriptionForeground,#888);
-  font-size:14px;padding:3px 5px;border-radius:4px;
+  font-size:13px;padding:3px 4px;border-radius:3px;
   display:flex;align-items:center;justify-content:center;
+  transition:all .12s;
 }
 .tool-btn:hover{
   background:var(--vscode-toolbar-hoverBackground,rgba(255,255,255,.1));
   color:var(--vscode-foreground,#ccc);
 }
+.tool-btn svg{width:14px;height:14px;fill:currentColor;}
 
 /* Send / Stop button */
 .send-btn{
   background:var(--vscode-button-background,#0e639c);
   color:var(--vscode-button-foreground,#fff);
-  border:none;border-radius:5px;
-  padding:4px 10px;cursor:pointer;
-  font-size:12px;font-weight:500;
+  border:none;border-radius:4px;
+  padding:3px 8px;cursor:pointer;
+  font-size:11px;font-weight:500;
   font-family:var(--vscode-font-family,sans-serif);
   display:flex;align-items:center;gap:4px;
   transition:background .12s;
 }
 .send-btn:hover{background:var(--vscode-button-hoverBackground,#1177bb);}
-.send-btn.stop{
-  background:var(--vscode-errorForeground,#f14c4c);
-}
+.send-btn.stop{background:var(--vscode-errorForeground,#f14c4c);}
 .send-btn.stop:hover{opacity:.85;}
 .send-btn:disabled{opacity:.4;cursor:default;}
+.send-btn svg{width:12px;height:12px;fill:currentColor;}
 
 /* ===== Context badge on messages ===== */
 .context-badge{
@@ -364,8 +459,8 @@ body{
   font-size:12px;
 }
 .spinner{
-  width:28px;height:28px;
-  border:3px solid var(--vscode-widget-border,rgba(255,255,255,.1));
+  width:24px;height:24px;
+  border:2px solid var(--vscode-panel-border,var(--vscode-widget-border,rgba(255,255,255,.1)));
   border-top-color:var(--vscode-activityBarBadge-background,#007acc);
   border-radius:50%;
   animation:spin .8s linear infinite;
@@ -374,11 +469,11 @@ body{
 .welcome-content{
   display:flex;flex-direction:column;
   align-items:center;justify-content:center;
-  height:100%;gap:16px;
+  height:100%;gap:14px;
 }
 
 /* ===== Responsive ===== */
 @media(max-width:360px){
   .msg{padding:10px 12px;gap:8px;}
-  .msg .avatar{width:24px;height:24px;font-size:12px;}
+  .msg .avatar{width:22px;height:22px;font-size:11px;}
 }

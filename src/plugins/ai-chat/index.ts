@@ -178,21 +178,49 @@ export function createAIChatPlugin(options?: AIChatOptions): Plugin {
                 }
               }
 
-              // --- Accept: apply code to active editor (replace selection or insert) ---
+              // --- Accept: smart apply (whole file or selection) + format ---
               if (msg.type === 'applyCode') {
                 const editor = vscodeApi.window.activeTextEditor;
                 if (!editor) {
                   vscodeApi.window.showWarningMessage('No active editor to apply code to.');
+                  webviewView.webview.postMessage({ type: 'applyResult', applyId: msg.applyId, success: false });
                   return;
                 }
-                await editor.edit((eb: any) => {
-                  if (editor.selection && !editor.selection.isEmpty) {
-                    eb.replace(editor.selection, msg.code);
+                try {
+                  const doc = editor.document;
+                  if (msg.mode === 'wholeFile') {
+                    // Replace entire file content
+                    const fullRange = new vscodeApi.Range(
+                      doc.positionAt(0),
+                      doc.positionAt(doc.getText().length),
+                    );
+                    await editor.edit((eb: any) => {
+                      eb.replace(fullRange, msg.code);
+                    });
                   } else {
-                    eb.insert(editor.selection.active, msg.code);
+                    // Replace selection or insert at cursor
+                    await editor.edit((eb: any) => {
+                      if (editor.selection && !editor.selection.isEmpty) {
+                        eb.replace(editor.selection, msg.code);
+                      } else {
+                        eb.insert(editor.selection.active, msg.code);
+                      }
+                    });
                   }
-                });
-                vscodeApi.window.showInformationMessage('Code applied to editor.');
+                  // Format document after apply if requested
+                  if (msg.format) {
+                    await vscodeApi.commands.executeCommand('editor.action.formatDocument');
+                  }
+                  webviewView.webview.postMessage({ type: 'applyResult', applyId: msg.applyId, success: true });
+                } catch (err: any) {
+                  vscodeApi.window.showErrorMessage(`Apply failed: ${err.message}`);
+                  webviewView.webview.postMessage({ type: 'applyResult', applyId: msg.applyId, success: false });
+                }
+              }
+
+              // --- Undo: revert last edit ---
+              if (msg.type === 'undoApply') {
+                await vscodeApi.commands.executeCommand('undo');
               }
 
               // --- Insert: insert at cursor position ---
