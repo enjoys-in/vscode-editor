@@ -15,7 +15,9 @@
     "baseUrl": ".",
     "paths": {
       "@core/*": ["src/core/*"],
-      "@editor/*": ["src/editor/*"],
+      "@full/*": ["src/full/*"],
+      "@editor/*": ["src/full/*"],
+      "@minimal/*": ["src/minimal/*"],
       "@plugins/*": ["src/plugins/*"],
       "@modules/*": ["src/modules/*"],
       "@ui/*": ["src/ui/*"]

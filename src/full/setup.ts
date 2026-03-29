@@ -424,8 +424,8 @@ const commonServices: IEditorOverrideServices = {
 const constructOptions: IWorkbenchConstructionOptions = {
   enableWorkspaceTrust: true,
   windowIndicator: {
-    label: 'WebTerminal Editor',
-    tooltip: '',
+    label: 'Terminus Editor',
+    tooltip: 'Powered by Enjoys',
     command: '',
   },
   workspaceProvider: {
@@ -442,7 +442,7 @@ const constructOptions: IWorkbenchConstructionOptions = {
   },
   configurationDefaults: {
     'window.title':
-      'WebTerminal Editor${separator}${dirty}${activeEditorShort}',
+      'Terminus Editor${separator}${dirty}${activeEditorShort}',
   },
   defaultLayout: {
     editors: [
@@ -453,8 +453,8 @@ const constructOptions: IWorkbenchConstructionOptions = {
     ],
   },
   productConfiguration: {
-    nameShort: 'WebTerminal',
-    nameLong: 'WebTerminal Editor',
+    nameShort: 'Terminus',
+    nameLong: 'Terminus Editor',
     extensionsGallery: {
       serviceUrl: 'https://open-vsx.org/vscode/gallery',
       resourceUrlTemplate:

@@ -59,15 +59,28 @@ async function main() {
   // Register terminus.about command (triggered by clicking brand in status bar)
   const host = new URLSearchParams(window.location.search).get('host');
   vscode.commands.registerCommand('terminus.about', async () => {
-    const items = [
-      host ? `$(server) Connected to: ${host}` : '$(info) Powered by Enjoys',
-      '$(github) GitHub: enjoys-in/webterminal',
-    ];
-    const pick = await vscode.window.showQuickPick(items, {
-      placeHolder: 'Terminus — Remote Code Editor',
-    });
-    if (pick?.includes('GitHub')) {
-      vscode.env.openExternal(vscode.Uri.parse('https://github.com/enjoys-in'));
+    const detail = [
+      'Terminus — Remote Code Editor',
+      '',
+      host ? `Connected to: ${host}` : 'Powered by Enjoys',
+      'Version 1.0.0',
+    ].join('\n');
+
+    const choice = await vscode.window.showInformationMessage(
+      'About Terminus',
+      { modal: true, detail },
+      'GitHub',
+      'LinkedIn',
+      'Portfolio',
+    );
+
+    const links: Record<string, string> = {
+      GitHub: 'https://github.com/Mullayam',
+      LinkedIn: 'https://linkedin.com/in/mullayam06',
+      Portfolio: 'https://me.enjoys.in',
+    };
+    if (choice && links[choice]) {
+      vscode.env.openExternal(vscode.Uri.parse(links[choice]));
     }
   });
 

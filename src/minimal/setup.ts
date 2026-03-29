@@ -125,14 +125,26 @@ function getBrandName(): string {
 const workspaceFolderName = getWorkspaceFolderName();
 const brandName = getBrandName();
 
+/** Check if required query params are present for workspace loading */
+function hasWorkspaceParams(): boolean {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('tabId') || params.get('sessionId');
+    const remotePath = params.get('path');
+    return !!(sessionId && remotePath);
+}
+
 function setupFileSystem() {
     const fileSystemProvider = new RegisteredFileSystemProvider(false);
+
+    const folders = hasWorkspaceParams()
+        ? [{ path: '/workspace', name: workspaceFolderName }]
+        : [];
 
     fileSystemProvider.registerFile(
         new RegisteredMemoryFile(
             workspaceFile,
             JSON.stringify(
-                { folders: [{ path: '/workspace', name: workspaceFolderName }] } satisfies IStoredWorkspace,
+                { folders } satisfies IStoredWorkspace,
                 null,
                 2,
             ),

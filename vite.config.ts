@@ -48,7 +48,8 @@ export default defineConfig(({ mode }) => {
   resolve: {
     alias: {
       '@core': path.resolve(__dirname, 'src/core'),
-      '@editor': path.resolve(__dirname, 'src/editor'),
+      '@full': path.resolve(__dirname, 'src/full'),
+      '@editor': path.resolve(__dirname, 'src/full'),
       '@minimal': path.resolve(__dirname, 'src/minimal'),
       '@plugins': path.resolve(__dirname, 'src/plugins'),
       '@modules': path.resolve(__dirname, 'src/modules'),

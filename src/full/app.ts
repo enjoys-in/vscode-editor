@@ -16,7 +16,7 @@ import { ModuleRegistry } from '@core/module-registry';
 import { EventBus } from '@core/event-bus';
 import { ServiceContainer } from '@core/service-container';
 import { CommandRegistry } from '@core/command-registry';
-import { initializeMonaco } from '@editor/setup';
+import { initializeMonaco } from './setup';
 
 export interface AppOptions {
   /** CSS selector or HTMLElement for the workbench container */
