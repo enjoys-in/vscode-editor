@@ -117,7 +117,13 @@ function getWorkspaceFolderName(): string {
     return 'workspace';
 }
 
+function getBrandName(): string {
+    const host = new URLSearchParams(window.location.search).get('host');
+    return host ? `Terminus — ${host}` : 'Terminus - Powered by Enjoys';
+}
+
 const workspaceFolderName = getWorkspaceFolderName();
+const brandName = getBrandName();
 
 function setupFileSystem() {
     const fileSystemProvider = new RegisteredFileSystemProvider(false);
@@ -184,13 +190,16 @@ const minimalServices: IEditorOverrideServices = {
 const constructOptions: IWorkbenchConstructionOptions = {
     enableWorkspaceTrust: false,
     windowIndicator: {
-        label: `WebTerminal — ${workspaceFolderName}`,
-        tooltip: new URLSearchParams(window.location.search).get('path') || '',
-        command: '',
+        label: brandName,
+        tooltip: new URLSearchParams(window.location.search).get('host')
+            ? `Connected to ${new URLSearchParams(window.location.search).get('host')}`
+            : 'Powered by Enjoys',
+        command: 'terminus.about',
     },
     productConfiguration: {
-        nameShort: 'WebTerminal',
-        nameLong: 'WebTerminal Minimal',
+        nameShort: 'Terminus',
+        nameLong: 'Terminus',
+        version: '1.0.0',
         extensionsGallery: {
             serviceUrl: 'https://open-vsx.org/vscode/gallery',
             resourceUrlTemplate:
@@ -219,7 +228,7 @@ const constructOptions: IWorkbenchConstructionOptions = {
     },
     configurationDefaults: {
         'window.title':
-            `${workspaceFolderName}\${separator}\${dirty}\${activeEditorShort}`,
+            `${brandName}\${separator}${workspaceFolderName}\${separator}\${dirty}\${activeEditorShort}`,
     },
 };
 

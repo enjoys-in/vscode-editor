@@ -63,39 +63,10 @@ import getTerminalServiceOverride from '@codingame/monaco-vscode-terminal-servic
 import getChatServiceOverride from '@codingame/monaco-vscode-chat-service-override';
 import getAiServiceOverride from '@codingame/monaco-vscode-ai-service-override';
 
-// Default extensions (side-effect imports — grammars, themes, icons)
+// Default extensions — only themes + icons + UI extensions loaded eagerly
 import '@codingame/monaco-vscode-theme-defaults-default-extension';
 import '@codingame/monaco-vscode-theme-seti-default-extension';
-import '@codingame/monaco-vscode-typescript-basics-default-extension';
-import '@codingame/monaco-vscode-javascript-default-extension';
-import '@codingame/monaco-vscode-json-default-extension';
-import '@codingame/monaco-vscode-css-default-extension';
-import '@codingame/monaco-vscode-html-default-extension';
-import '@codingame/monaco-vscode-markdown-basics-default-extension';
-import '@codingame/monaco-vscode-python-default-extension';
-import '@codingame/monaco-vscode-shellscript-default-extension';
-import '@codingame/monaco-vscode-yaml-default-extension';
-import '@codingame/monaco-vscode-xml-default-extension';
 import '@codingame/monaco-vscode-references-view-default-extension';
-import '@codingame/monaco-vscode-search-result-default-extension';
-import '@codingame/monaco-vscode-configuration-editing-default-extension';
-
-// Language features — loaded lazily to save ~200-400MB RAM at startup.
-// Each one spawns a worker with a full language server; loading all 5 eagerly
-// is the #1 reason for high memory consumption.
-//
-// They are imported dynamically below in `lazyLoadLanguageFeatures()`.
-// To load everything eagerly instead, uncomment the static imports:
-//
-// import '@codingame/monaco-vscode-typescript-language-features-default-extension';
-// import '@codingame/monaco-vscode-json-language-features-default-extension';
-// import '@codingame/monaco-vscode-html-language-features-default-extension';
-// import '@codingame/monaco-vscode-css-language-features-default-extension';
-// import '@codingame/monaco-vscode-markdown-language-features-default-extension';
-// import '@codingame/monaco-vscode-emmet-default-extension';
-
-// Required for vscode extension API usage in plugins
-// (imported in main.ts entry point to support extension host worker)
 
 // User defaults (imported as raw strings)
 import defaultConfiguration from './user/configuration.json?raw';
@@ -104,59 +75,199 @@ import defaultKeybindings from './user/keybindings.json?raw';
 let initialized = false;
 
 // ---------------------------------------------------------------------------
-// Lazy language-feature loader
+// Lazy language loader
 //
-// Instead of importing all 5+ language-feature extensions at startup (each
-// one spawns a full language server worker consuming 50-200MB each), we load
-// them on demand when a file of that language is first opened.
+// Grammars + language features are loaded on demand when a file of that
+// language is first opened. This keeps the initial bundle small.
 // ---------------------------------------------------------------------------
 
-const languageFeatureLoaders: Record<string, () => Promise<unknown>> = {
-  typescript: () => import('@codingame/monaco-vscode-typescript-language-features-default-extension'),
-  javascript: () => import('@codingame/monaco-vscode-typescript-language-features-default-extension'),
-  typescriptreact: () => import('@codingame/monaco-vscode-typescript-language-features-default-extension'),
-  javascriptreact: () => import('@codingame/monaco-vscode-typescript-language-features-default-extension'),
-  json: () => import('@codingame/monaco-vscode-json-language-features-default-extension'),
-  jsonc: () => import('@codingame/monaco-vscode-json-language-features-default-extension'),
-  html: () => import('@codingame/monaco-vscode-html-language-features-default-extension'),
-  css: () => import('@codingame/monaco-vscode-css-language-features-default-extension'),
-  scss: () => import('@codingame/monaco-vscode-css-language-features-default-extension'),
-  less: () => import('@codingame/monaco-vscode-css-language-features-default-extension'),
-  markdown: () => import('@codingame/monaco-vscode-markdown-language-features-default-extension'),
+type Loader = () => Promise<unknown>;
+
+const grammarLoaders: Record<string, Loader[]> = {
+  // --- Web essentials (grammar + language features) ---
+  typescript: [
+    () => import('@codingame/monaco-vscode-typescript-basics-default-extension'),
+    () => import('@codingame/monaco-vscode-typescript-language-features-default-extension'),
+  ],
+  typescriptreact: [
+    () => import('@codingame/monaco-vscode-typescript-basics-default-extension'),
+    () => import('@codingame/monaco-vscode-typescript-language-features-default-extension'),
+  ],
+  javascript: [
+    () => import('@codingame/monaco-vscode-javascript-default-extension'),
+    () => import('@codingame/monaco-vscode-typescript-language-features-default-extension'),
+  ],
+  javascriptreact: [
+    () => import('@codingame/monaco-vscode-javascript-default-extension'),
+    () => import('@codingame/monaco-vscode-typescript-language-features-default-extension'),
+  ],
+  json: [
+    () => import('@codingame/monaco-vscode-json-default-extension'),
+    () => import('@codingame/monaco-vscode-json-language-features-default-extension'),
+  ],
+  jsonc: [
+    () => import('@codingame/monaco-vscode-json-default-extension'),
+    () => import('@codingame/monaco-vscode-json-language-features-default-extension'),
+    () => import('@codingame/monaco-vscode-configuration-editing-default-extension'),
+  ],
+  html: [
+    () => import('@codingame/monaco-vscode-html-default-extension'),
+    () => import('@codingame/monaco-vscode-html-language-features-default-extension'),
+    () => import('@codingame/monaco-vscode-emmet-default-extension'),
+  ],
+  css: [
+    () => import('@codingame/monaco-vscode-css-default-extension'),
+    () => import('@codingame/monaco-vscode-css-language-features-default-extension'),
+  ],
+  scss: [
+    () => import('@codingame/monaco-vscode-scss-default-extension'),
+    () => import('@codingame/monaco-vscode-css-language-features-default-extension'),
+  ],
+  less: [
+    () => import('@codingame/monaco-vscode-less-default-extension'),
+    () => import('@codingame/monaco-vscode-css-language-features-default-extension'),
+  ],
+  markdown: [
+    () => import('@codingame/monaco-vscode-markdown-basics-default-extension'),
+    () => import('@codingame/monaco-vscode-markdown-language-features-default-extension'),
+  ],
+
+  // --- Popular languages (grammar only) ---
+  python: [() => import('@codingame/monaco-vscode-python-default-extension')],
+  java: [() => import('@codingame/monaco-vscode-java-default-extension')],
+  csharp: [() => import('@codingame/monaco-vscode-csharp-default-extension')],
+  cpp: [() => import('@codingame/monaco-vscode-cpp-default-extension')],
+  c: [() => import('@codingame/monaco-vscode-cpp-default-extension')],
+  go: [() => import('@codingame/monaco-vscode-go-default-extension')],
+  rust: [() => import('@codingame/monaco-vscode-rust-default-extension')],
+  ruby: [() => import('@codingame/monaco-vscode-ruby-default-extension')],
+  php: [() => import('@codingame/monaco-vscode-php-default-extension')],
+  swift: [() => import('@codingame/monaco-vscode-swift-default-extension')],
+  dart: [() => import('@codingame/monaco-vscode-dart-default-extension')],
+  kotlin: [() => import('@codingame/monaco-vscode-java-default-extension')],
+
+  // --- Shell / DevOps ---
+  shellscript: [() => import('@codingame/monaco-vscode-shellscript-default-extension')],
+  powershell: [() => import('@codingame/monaco-vscode-powershell-default-extension')],
+  bat: [() => import('@codingame/monaco-vscode-bat-default-extension')],
+  dockerfile: [() => import('@codingame/monaco-vscode-docker-default-extension')],
+  yaml: [() => import('@codingame/monaco-vscode-yaml-default-extension')],
+  xml: [() => import('@codingame/monaco-vscode-xml-default-extension')],
+  ini: [() => import('@codingame/monaco-vscode-ini-default-extension')],
+  makefile: [() => import('@codingame/monaco-vscode-make-default-extension')],
+
+  // --- Data / Query ---
+  sql: [() => import('@codingame/monaco-vscode-sql-default-extension')],
+  r: [() => import('@codingame/monaco-vscode-r-default-extension')],
+  julia: [() => import('@codingame/monaco-vscode-julia-default-extension')],
+  lua: [() => import('@codingame/monaco-vscode-lua-default-extension')],
+
+  // --- Markup / Templates ---
+  latex: [() => import('@codingame/monaco-vscode-latex-default-extension')],
+  pug: [() => import('@codingame/monaco-vscode-pug-default-extension')],
+  jade: [() => import('@codingame/monaco-vscode-pug-default-extension')],
+  handlebars: [() => import('@codingame/monaco-vscode-handlebars-default-extension')],
+  razor: [() => import('@codingame/monaco-vscode-razor-default-extension')],
+  restructuredtext: [() => import('@codingame/monaco-vscode-restructuredtext-default-extension')],
+
+  // --- Other ---
+  perl: [() => import('@codingame/monaco-vscode-perl-default-extension')],
+  clojure: [() => import('@codingame/monaco-vscode-clojure-default-extension')],
+  coffeescript: [() => import('@codingame/monaco-vscode-coffeescript-default-extension')],
+  fsharp: [() => import('@codingame/monaco-vscode-fsharp-default-extension')],
+  groovy: [() => import('@codingame/monaco-vscode-groovy-default-extension')],
+  hlsl: [() => import('@codingame/monaco-vscode-hlsl-default-extension')],
+  shaderlab: [() => import('@codingame/monaco-vscode-shaderlab-default-extension')],
+  'objective-c': [() => import('@codingame/monaco-vscode-objective-c-default-extension')],
+  'objective-cpp': [() => import('@codingame/monaco-vscode-objective-c-default-extension')],
+  vb: [() => import('@codingame/monaco-vscode-vb-default-extension')],
+  diff: [() => import('@codingame/monaco-vscode-diff-default-extension')],
+  log: [() => import('@codingame/monaco-vscode-log-default-extension')],
+  'search-result': [() => import('@codingame/monaco-vscode-search-result-default-extension')],
 };
 
-const loadedFeatures = new Set<string>();
+const extToLang: Record<string, string> = {
+  '.ts': 'typescript', '.tsx': 'typescriptreact',
+  '.js': 'javascript', '.jsx': 'javascriptreact',
+  '.mjs': 'javascript', '.cjs': 'javascript',
+  '.json': 'json', '.jsonc': 'jsonc',
+  '.html': 'html', '.htm': 'html',
+  '.css': 'css', '.scss': 'scss', '.less': 'less',
+  '.md': 'markdown', '.markdown': 'markdown',
+  '.py': 'python', '.pyw': 'python',
+  '.java': 'java', '.kt': 'kotlin', '.kts': 'kotlin',
+  '.cs': 'csharp',
+  '.c': 'c', '.h': 'c', '.cpp': 'cpp', '.cxx': 'cpp', '.cc': 'cpp', '.hpp': 'cpp',
+  '.go': 'go', '.rs': 'rust', '.rb': 'ruby', '.php': 'php',
+  '.swift': 'swift', '.dart': 'dart',
+  '.sh': 'shellscript', '.bash': 'shellscript', '.zsh': 'shellscript',
+  '.ps1': 'powershell', '.psm1': 'powershell',
+  '.bat': 'bat', '.cmd': 'bat',
+  '.yaml': 'yaml', '.yml': 'yaml',
+  '.xml': 'xml', '.svg': 'xml', '.xsl': 'xml',
+  '.ini': 'ini', '.cfg': 'ini', '.conf': 'ini',
+  '.sql': 'sql', '.r': 'r', '.jl': 'julia', '.lua': 'lua',
+  '.tex': 'latex', '.bib': 'latex',
+  '.pug': 'pug', '.jade': 'jade',
+  '.hbs': 'handlebars', '.cshtml': 'razor',
+  '.rst': 'restructuredtext',
+  '.pl': 'perl', '.pm': 'perl',
+  '.clj': 'clojure', '.cljs': 'clojure',
+  '.coffee': 'coffeescript',
+  '.fs': 'fsharp', '.fsx': 'fsharp',
+  '.groovy': 'groovy', '.gradle': 'groovy',
+  '.hlsl': 'hlsl', '.shader': 'shaderlab',
+  '.m': 'objective-c', '.mm': 'objective-cpp',
+  '.vb': 'vb',
+  '.diff': 'diff', '.patch': 'diff',
+  '.log': 'log',
+  '.dockerfile': 'dockerfile',
+  '.makefile': 'makefile', '.mk': 'makefile',
+};
+
+const loadedLangs = new Set<string>();
+const loadingLangs = new Map<string, Promise<void>>();
+
+async function loadLanguage(langId: string): Promise<void> {
+  if (loadedLangs.has(langId)) return;
+  if (loadingLangs.has(langId)) return loadingLangs.get(langId);
+
+  const loaders = grammarLoaders[langId];
+  if (!loaders) return;
+
+  const p = Promise.all(loaders.map((fn) => fn().catch((e) => {
+    console.warn(`[LazyLoad] Failed to load ${langId}:`, e);
+  }))).then(() => {
+    loadedLangs.add(langId);
+    loadingLangs.delete(langId);
+    console.log(`[LazyLoad] Loaded: ${langId}`);
+  });
+
+  loadingLangs.set(langId, p);
+  return p;
+}
 
 /** Call after Monaco is initialized to start listening for editor opens */
 function setupLazyLanguageFeatures() {
-  // Also load emmet lazily (HTML/CSS toolkit)
-  const emmetLangs = new Set(['html', 'css', 'scss', 'less', 'jsx', 'tsx', 'typescriptreact', 'javascriptreact']);
-  let emmetLoaded = false;
+  const handleDocument = (doc: { languageId: string; uri: { path: string } }) => {
+    let langId = doc.languageId;
 
-  vscode.workspace.onDidOpenTextDocument((doc) => {
-    const langId = doc.languageId;
-
-    // Load language features
-    const loaderKey = langId;
-    if (languageFeatureLoaders[loaderKey] && !loadedFeatures.has(loaderKey)) {
-      const loader = languageFeatureLoaders[loaderKey];
-      // Mark all aliases as loaded (e.g. typescript & typescriptreact share TS features)
-      for (const [key, val] of Object.entries(languageFeatureLoaders)) {
-        if (val === loader) loadedFeatures.add(key);
-      }
-      loader().then(() => {
-        console.log(`[LazyLoad] Loaded language features for: ${langId}`);
-      });
+    // If plaintext, try to resolve from file extension
+    if (langId === 'plaintext' || !grammarLoaders[langId]) {
+      const ext = '.' + doc.uri.path.split('/').pop()?.split('.').pop()?.toLowerCase();
+      const resolved = extToLang[ext];
+      if (resolved) langId = resolved;
     }
 
-    // Load emmet
-    if (!emmetLoaded && emmetLangs.has(langId)) {
-      emmetLoaded = true;
-      import('@codingame/monaco-vscode-emmet-default-extension').then(() => {
-        console.log('[LazyLoad] Loaded emmet');
-      });
-    }
-  });
+    loadLanguage(langId);
+  };
+
+  vscode.workspace.onDidOpenTextDocument(handleDocument);
+
+  // Load grammars for already-open documents
+  for (const doc of vscode.workspace.textDocuments) {
+    handleDocument(doc);
+  }
 }
 
 // ---------------------------------------------------------------------------

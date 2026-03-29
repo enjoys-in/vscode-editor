@@ -78,13 +78,31 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
       // Decide: file or directory
       if (isFilePath(remotePath)) {
         console.log('[ApiFileReader] Loading file:', remotePath);
-        loadFile(remotePath, sessionId).catch((err) => {
+        Promise.resolve(
+          ctx.vscode.window.withProgress(
+            {
+              location: ctx.vscode.ProgressLocation.Notification,
+              title: `Loading ${remotePath.split('/').pop()}...`,
+              cancellable: false,
+            },
+            () => loadFile(remotePath!, sessionId),
+          ),
+        ).catch((err: any) => {
           console.error('[ApiFileReader] Load failed:', err);
           ctx.vscode.window.showErrorMessage(`Failed to load file: ${err.message}`);
         });
       } else {
         console.log('[ApiFileReader] Loading directory:', remotePath);
-        loadDirectory(remotePath, sessionId).catch((err) => {
+        Promise.resolve(
+          ctx.vscode.window.withProgress(
+            {
+              location: ctx.vscode.ProgressLocation.Notification,
+              title: `Loading directory ${remotePath.split('/').pop() || remotePath}...`,
+              cancellable: false,
+            },
+            () => loadDirectory(remotePath!, sessionId),
+          ),
+        ).catch((err: any) => {
           console.error('[ApiFileReader] Dir load failed:', err);
           ctx.vscode.window.showErrorMessage(`Failed to load directory: ${err.message}`);
         });

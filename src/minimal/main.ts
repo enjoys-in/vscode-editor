@@ -8,6 +8,14 @@ import { enableVsixDragAndDrop } from './extension-loader';
 import { initLanguageLoader } from './language-loader';
 
 async function main() {
+  // Validate required query params before booting
+  const params = new URLSearchParams(window.location.search);
+  const sessionId = params.get('tabId') || params.get('sessionId');
+  const remotePath = params.get('path');
+  const missingParams: string[] = [];
+  if (!sessionId) missingParams.push('tabId (or sessionId)');
+  if (!remotePath) missingParams.push('path');
+
   console.log('[Minimal] Starting...', Date.now());
   const app = new MinimalApp({
     container: '#workbench',
@@ -32,9 +40,36 @@ async function main() {
   await app.boot();
   console.log('[Minimal] Boot complete, all plugins activated');
 
+  // Show vscode modal dialog if required query params are missing — no way to dismiss
+  if (missingParams.length > 0) {
+    const vscode = await import('vscode');
+    const msg = `Missing required URL parameters: ${missingParams.join(', ')}`;
+    const detail = `The editor requires a valid session ID and remote path to load.\n\nExpected format:\n?tabId=SESSION_ID&path=/remote/path\n\nor\n?sessionId=SESSION_ID&path=/remote/path`;
+
+    // Loop to prevent dismissal — re-show dialog if user closes it
+    while (true) {
+      await vscode.window.showErrorMessage(msg, { modal: true, detail });
+    }
+  }
+
   // Lazy-load language grammars when files are opened
   const vscode = await import('vscode');
   initLanguageLoader(vscode);
+
+  // Register terminus.about command (triggered by clicking brand in status bar)
+  const host = new URLSearchParams(window.location.search).get('host');
+  vscode.commands.registerCommand('terminus.about', async () => {
+    const items = [
+      host ? `$(server) Connected to: ${host}` : '$(info) Powered by Enjoys',
+      '$(github) GitHub: enjoys-in/webterminal',
+    ];
+    const pick = await vscode.window.showQuickPick(items, {
+      placeHolder: 'Terminus — Remote Code Editor',
+    });
+    if (pick?.includes('GitHub')) {
+      vscode.env.openExternal(vscode.Uri.parse('https://github.com/enjoys-in'));
+    }
+  });
 
   // Drag-and-drop .vsix to install extensions
   enableVsixDragAndDrop(document.body);
