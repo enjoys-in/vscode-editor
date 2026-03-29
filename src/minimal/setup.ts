@@ -57,12 +57,24 @@ import getQuickAccessServiceOverride from '@codingame/monaco-vscode-quickaccess-
 import getWorkbenchServiceOverride from '@codingame/monaco-vscode-workbench-service-override';
 import getExtensionGalleryServiceOverride from '@codingame/monaco-vscode-extension-gallery-service-override';
 // import getViewsServiceOverride from '@codingame/monaco-vscode-views-service-override';
-import getChatServiceOverride from '@codingame/monaco-vscode-chat-service-override';
-import getAiServiceOverride from '@codingame/monaco-vscode-ai-service-override';
+ 
 
 // Minimal default extensions — just themes + icons
 import '@codingame/monaco-vscode-theme-defaults-default-extension';
 import '@codingame/monaco-vscode-theme-seti-default-extension';
+
+// Language grammars — syntax highlighting + language detection
+import '@codingame/monaco-vscode-typescript-basics-default-extension';
+import '@codingame/monaco-vscode-javascript-default-extension';
+import '@codingame/monaco-vscode-json-default-extension';
+import '@codingame/monaco-vscode-css-default-extension';
+import '@codingame/monaco-vscode-html-default-extension';
+import '@codingame/monaco-vscode-markdown-basics-default-extension';
+import '@codingame/monaco-vscode-python-default-extension';
+import '@codingame/monaco-vscode-shellscript-default-extension';
+import '@codingame/monaco-vscode-yaml-default-extension';
+import '@codingame/monaco-vscode-xml-default-extension';
+import '@codingame/monaco-vscode-configuration-editing-default-extension';
 
 // Required for vscode extension API usage in plugins
 // (imported in main.ts entry point to support extension host worker)
@@ -102,6 +114,22 @@ window.MonacoEnvironment = {
 
 const workspaceFile = monaco.Uri.file('/workspace.code-workspace');
 
+/** Derive a display-friendly folder name from the ?path= URL query param */
+function getWorkspaceFolderName(): string {
+    try {
+        const remotePath = new URLSearchParams(window.location.search).get('path');
+        if (remotePath) {
+            // Use last non-empty segment of the remote path
+            const segments = remotePath.replace(/\/+$/, '').split('/');
+            const last = segments.filter(Boolean).pop();
+            if (last) return last;
+        }
+    } catch { /* ignore */ }
+    return 'workspace';
+}
+
+const workspaceFolderName = getWorkspaceFolderName();
+
 function setupFileSystem() {
     const fileSystemProvider = new RegisteredFileSystemProvider(false);
 
@@ -109,7 +137,7 @@ function setupFileSystem() {
         new RegisteredMemoryFile(
             workspaceFile,
             JSON.stringify(
-                { folders: [{ path: '/workspace' }] } satisfies IStoredWorkspace,
+                { folders: [{ path: '/workspace', name: workspaceFolderName }] } satisfies IStoredWorkspace,
                 null,
                 2,
             ),
@@ -157,8 +185,7 @@ const minimalServices: IEditorOverrideServices = {
     ...getExtensionGalleryServiceOverride({ webOnly: false }),
     // ...getViewsServiceOverride(),
 
-    ...getChatServiceOverride(),
-    ...getAiServiceOverride(),
+   
 };
 
 // ---------------------------------------------------------------------------
@@ -168,8 +195,8 @@ const minimalServices: IEditorOverrideServices = {
 const constructOptions: IWorkbenchConstructionOptions = {
     enableWorkspaceTrust: false,
     windowIndicator: {
-        label: 'WebTerminal — Minimal',
-        tooltip: '',
+        label: `WebTerminal — ${workspaceFolderName}`,
+        tooltip: new URLSearchParams(window.location.search).get('path') || '',
         command: '',
     },
     productConfiguration: {
@@ -203,7 +230,7 @@ const constructOptions: IWorkbenchConstructionOptions = {
     },
     configurationDefaults: {
         'window.title':
-            'WebTerminal Minimal${separator}${dirty}${activeEditorShort}',
+            `${workspaceFolderName}\${separator}\${dirty}\${activeEditorShort}`,
     },
 };
 

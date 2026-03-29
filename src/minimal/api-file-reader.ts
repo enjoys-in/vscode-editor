@@ -5,6 +5,7 @@ import {
   registerFileSystemOverlay,
 } from '@codingame/monaco-vscode-files-service-override';
 import { SftpSocket, type SftpFileEntry } from './sftp-socket';
+import { API_CONFIG, apiUrl } from './config';
 
 // ---------------------------------------------------------------------------
 // API File Reader Plugin
@@ -18,7 +19,6 @@ import { SftpSocket, type SftpFileEntry } from './sftp-socket';
 // ---------------------------------------------------------------------------
 
 export interface ApiFileReaderOptions {
-  apiBase?: string;
   basePath?: string;
 }
 
@@ -45,7 +45,7 @@ function isFilePath(p: string): boolean {
 export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugin {
   const disposables: Disposable[] = [];
   const basePath = options?.basePath ?? '/workspace';
-  const apiBase = options?.apiBase ?? '';
+  const apiBase = API_CONFIG.baseUrl;
 
   return {
     id: 'builtin.api-file-reader',
@@ -104,7 +104,7 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
       }
 
       async function fetchFile(filePath: string, sid: string): Promise<string> {
-        const res = await fetch(`${apiBase}/api/file/read`, {
+        const res = await fetch(apiUrl('fileRead'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId: sid, path: filePath }),
@@ -141,7 +141,7 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
       // -------------------------------------------------------------------
 
       async function loadDirectory(dirPath: string, sid: string): Promise<void> {
-        const res = await fetch(`${apiBase}/api/files`, {
+        const res = await fetch(apiUrl('fileList'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sftpSessionId: sid, path: dirPath }),
@@ -204,7 +204,7 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
       // -------------------------------------------------------------------
 
       async function saveFile(filePath: string, sid: string, content: string): Promise<void> {
-        const res = await fetch(`${apiBase}/api/file/write`, {
+        const res = await fetch(apiUrl('fileWrite'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId: sid, path: filePath, content }),

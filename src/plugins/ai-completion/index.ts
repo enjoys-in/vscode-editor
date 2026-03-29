@@ -1,18 +1,14 @@
 import * as monaco from 'monaco-editor';
 import type { Plugin, PluginContext, Disposable } from '@core/types';
+import { API_CONFIG, apiUrl } from '../../minimal/config';
 
 export interface AICompletionOptions {
-  endpoint: string;
-  apiKey?: string;
-  model?: string;
-  maxTokens?: number;
+  /** Override the stream endpoint (full URL). Falls back to config. */
+  endpoint?: string;
   debounceMs?: number;
 }
 
 const DEFAULT_OPTIONS: AICompletionOptions = {
-  endpoint: '',
-  model: 'gpt-4',
-  maxTokens: 256,
   debounceMs: 300,
 };
 
@@ -51,12 +47,13 @@ export function createAICompletionPlugin(
       );
 
       // Native VSCode statusbar item
+      const endpoint = options.endpoint || apiUrl('aiStream');
       const statusItem = ctx.vscode.window.createStatusBarItem(
         ctx.vscode.StatusBarAlignment.Right,
         90,
       );
-      statusItem.text = options.endpoint ? '$(sparkle) AI' : '$(sparkle) AI (no endpoint)';
-      statusItem.tooltip = 'AI Completion';
+      statusItem.text = '$(sparkle) AI';
+      statusItem.tooltip = `AI Completion → ${endpoint}`;
       statusItem.show();
       disposables.push(statusItem);
     },
@@ -71,6 +68,7 @@ class AIInlineCompletionProvider
   implements monaco.languages.InlineCompletionsProvider
 {
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private abortController: AbortController | null = null;
 
   constructor(private options: AICompletionOptions) {}
 
@@ -78,9 +76,10 @@ class AIInlineCompletionProvider
     model: monaco.editor.ITextModel,
     position: monaco.Position,
     _context: monaco.languages.InlineCompletionContext,
-    _token: monaco.CancellationToken,
+    token: monaco.CancellationToken,
   ): Promise<monaco.languages.InlineCompletions> {
-    if (!this.options.endpoint) return { items: [] };
+    // Cancel any previous in-flight request
+    this.abortController?.abort();
 
     // Debounce
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
@@ -88,12 +87,7 @@ class AIInlineCompletionProvider
     return new Promise((resolve) => {
       this.debounceTimer = setTimeout(async () => {
         try {
-          const text = model.getValue();
-          const offset = model.getOffsetAt(position);
-          const prefix = text.slice(0, offset);
-          const suffix = text.slice(offset);
-
-          const result = await this.fetchCompletion(prefix, suffix);
+          const result = await this.fetchStream(model, position, token);
           if (!result) {
             resolve({ items: [] });
             return;
@@ -123,40 +117,83 @@ class AIInlineCompletionProvider
     // nothing to free
   }
 
-  private async fetchCompletion(
-    prefix: string,
-    suffix: string,
-  ): Promise<string | null> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (this.options.apiKey) {
-      headers['Authorization'] = `Bearer ${this.options.apiKey}`;
-    }
+  disposeInlineCompletions(): void {
+    // nothing to dispose
+  }
 
-    const resp = await fetch(this.options.endpoint, {
+  private async fetchStream(
+    model: monaco.editor.ITextModel,
+    position: monaco.Position,
+    token: monaco.CancellationToken,
+  ): Promise<string | null> {
+    const text = model.getValue();
+    const offset = model.getOffsetAt(position);
+
+    const endpoint = this.options.endpoint || apiUrl('aiStream');
+    const controller = new AbortController();
+    this.abortController = controller;
+
+    // Cancel on Monaco cancellation
+    token.onCancellationRequested(() => controller.abort());
+
+    const uri = model.uri.toString();
+    const filename = uri.split('/').pop() || 'untitled';
+    const languageId = model.getLanguageId();
+
+    const resp = await fetch(endpoint, {
       method: 'POST',
-      headers,
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
-        model: this.options.model,
-        max_tokens: this.options.maxTokens,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are an inline code completion engine. Return ONLY the code to insert. No explanations.',
-          },
-          {
-            role: 'user',
-            content: `Complete the code at the cursor position marked with <CURSOR>:\n\n${prefix}<CURSOR>${suffix}`,
-          },
-        ],
+        filename,
+        language: languageId,
+        textBeforeCursor: text.slice(0, offset),
+        textAfterCursor: text.slice(offset),
+        cursorPosition: {
+          lineNumber: position.lineNumber,
+          column: position.column,
+        },
       }),
     });
 
-    if (!resp.ok) return null;
+    if (!resp.ok || !resp.body) return null;
 
-    const data = await resp.json();
-    return data?.choices?.[0]?.message?.content?.trim() ?? null;
+    // Read SSE stream — each chunk is {"text":"..."}
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let result = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        // Handle SSE "data: ..." format or raw JSON lines
+        const jsonStr = trimmed.startsWith('data: ')
+          ? trimmed.slice(6)
+          : trimmed;
+
+        if (jsonStr === '[DONE]') continue;
+
+        try {
+          const parsed = JSON.parse(jsonStr);
+          if (parsed.text) {
+            result += parsed.text;
+          }
+        } catch {
+          // skip unparseable lines
+        }
+      }
+    }
+
+    return result || null;
   }
 }
