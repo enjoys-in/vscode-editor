@@ -181,7 +181,7 @@ export class AccountStorage {
 
   // ----- Connection Profiles -----
 
-  private getProfiles(): ConnectionProfile[] {
+  getProfiles(): ConnectionProfile[] {
     try {
       return JSON.parse(localStorage.getItem(PROFILES_KEY) || '[]');
     } catch {
@@ -247,10 +247,36 @@ export class AccountStorage {
     return decryptString(profile.encryptedPassword, profile.iv, this.sessionPassword, salt);
   }
 
-  deleteProfile(id: string): boolean {
-    if (!this.sessionUser) return false;
+  addProfileSimple(profile: {
+    label: string;
+    bridgeUrl: string;
+    host: string;
+    port?: number;
+    username: string;
+    password?: string;
+    usePrivateKey?: boolean;
+  }): ConnectionProfile {
+    const entry: ConnectionProfile = {
+      id: crypto.randomUUID(),
+      owner: 'local',
+      label: profile.label,
+      bridgeUrl: profile.bridgeUrl,
+      host: profile.host,
+      port: profile.port ?? 22,
+      username: profile.username,
+      usePrivateKey: profile.usePrivateKey,
+      createdAt: Date.now(),
+    };
+
     const profiles = this.getProfiles();
-    const idx = profiles.findIndex((p) => p.id === id && p.owner === this.sessionUser!.username);
+    profiles.push(entry);
+    this.saveProfiles(profiles);
+    return entry;
+  }
+
+  deleteProfile(id: string): boolean {
+    const profiles = this.getProfiles();
+    const idx = profiles.findIndex((p) => p.id === id);
     if (idx === -1) return false;
     profiles.splice(idx, 1);
     this.saveProfiles(profiles);

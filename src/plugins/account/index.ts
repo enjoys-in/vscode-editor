@@ -122,17 +122,6 @@ export function createAccountPlugin(): Plugin {
         function getTreeItems(): SftpTreeItem[] {
           const items: SftpTreeItem[] = [];
 
-          // Account section
-          if (storage.isLoggedIn) {
-            items.push({
-              type: 'account-header',
-              label: `Signed in as ${storage.currentUser}`,
-            });
-            items.push({ type: 'logout-button', label: 'Sign Out' });
-          } else {
-            items.push({ type: 'login-button', label: 'Sign In / Create Account' });
-          }
-
           // Connection status
           if (connectedProfile) {
             items.push({
@@ -144,26 +133,24 @@ export function createAccountPlugin(): Plugin {
             items.push({ type: 'disconnect-button', label: 'Disconnect' });
           }
 
-          // Saved profiles
-          if (storage.isLoggedIn) {
-            items.push({ type: 'connections-header', label: 'Saved Connections' });
+          // Saved profiles (always visible, no login required)
+          items.push({ type: 'connections-header', label: 'Saved Connections' });
 
-            const profiles = storage.getUserProfiles();
-            if (profiles.length === 0) {
-              items.push({ type: 'no-profiles', label: 'No saved connections' });
-            } else {
-              for (const p of profiles) {
-                items.push({
-                  type: 'profile',
-                  label: p.label,
-                  description: `${p.username}@${p.host}:${p.port}`,
-                  profile: p,
-                });
-              }
+          const profiles = storage.getProfiles();
+          if (profiles.length === 0) {
+            items.push({ type: 'no-profiles', label: 'No saved connections' });
+          } else {
+            for (const p of profiles) {
+              items.push({
+                type: 'profile',
+                label: p.label,
+                description: `${p.username}@${p.host}:${p.port}`,
+                profile: p,
+              });
             }
-
-            items.push({ type: 'add-profile', label: 'Add Connection...' });
           }
+
+          items.push({ type: 'add-profile', label: 'Add Connection...' });
 
           return items;
         }
@@ -243,14 +230,14 @@ export function createAccountPlugin(): Plugin {
       disposables.push(statusItem);
 
       function updateStatus() {
-        if (storage.isLoggedIn) {
-          statusItem.text = `$(account) ${storage.currentUser}`;
-          statusItem.tooltip = 'Click to manage account';
+        if (connectedProfile) {
+          statusItem.text = `$(vm-active) ${connectedProfile}`;
+          statusItem.tooltip = 'Connected to SFTP';
           statusItem.command = 'account.menu';
         } else {
-          statusItem.text = '$(sign-in) Sign In';
-          statusItem.tooltip = 'Sign in to access SFTP connections';
-          statusItem.command = 'account.login';
+          statusItem.text = '$(remote-explorer) SFTP';
+          statusItem.tooltip = 'Open SFTP connections';
+          statusItem.command = 'account.menu';
         }
       }
 
@@ -322,16 +309,25 @@ export function createAccountPlugin(): Plugin {
       // ---------------------------------------------------------------
 
       async function accountMenu(): Promise<void> {
-        const pick = await ctx.vscode.window.showQuickPick(
-          ['$(remote-explorer) Open SFTP Panel', '$(sign-out) Sign Out'],
-          { placeHolder: `Signed in as ${storage.currentUser}` },
-        );
+        const items = ['$(remote-explorer) Open SFTP Panel', '$(add) Add Connection'];
+        if (connectedProfile) {
+          items.push('$(debug-disconnect) Disconnect');
+        }
+        const pick = await ctx.vscode.window.showQuickPick(items, {
+          placeHolder: connectedProfile ? `Connected: ${connectedProfile}` : 'SFTP Connections',
+        });
         if (!pick) return;
 
-        if (pick.includes('SFTP')) {
+        if (pick.includes('SFTP Panel')) {
           ctx.vscode.commands.executeCommand('sftp-connections-view.focus');
-        } else if (pick.includes('Sign Out')) {
-          doLogout();
+        } else if (pick.includes('Add Connection')) {
+          addProfileFlow();
+        } else if (pick.includes('Disconnect')) {
+          const workspace = ctx.services.get<any>('workspace');
+          workspace?.sftpDisconnect();
+          connectedProfile = null;
+          refreshTree();
+          updateStatus();
         }
       }
 
@@ -409,11 +405,6 @@ export function createAccountPlugin(): Plugin {
       // ---------------------------------------------------------------
 
       async function addProfileFlow(): Promise<void> {
-        if (!storage.isLoggedIn) {
-          const ok = await loginFlow();
-          if (!ok) return;
-        }
-
         const label = await ctx.vscode.window.showInputBox({
           prompt: 'Connection name',
           placeHolder: 'My Server',
@@ -447,7 +438,7 @@ export function createAccountPlugin(): Plugin {
         let password: string | undefined;
         if (authMethod === 'Password') {
           password = await ctx.vscode.window.showInputBox({
-            prompt: 'SSH Password (will be encrypted)',
+            prompt: 'SSH Password',
             password: true,
           });
         }
@@ -459,7 +450,7 @@ export function createAccountPlugin(): Plugin {
         });
         if (!bridgeUrl) return;
 
-        const profile = await storage.addProfile({
+        const profile = storage.addProfileSimple({
           label,
           bridgeUrl,
           host,
@@ -469,12 +460,8 @@ export function createAccountPlugin(): Plugin {
           usePrivateKey: authMethod.startsWith('Private'),
         });
 
-        if (profile) {
-          ctx.vscode.window.showInformationMessage(`Connection "${label}" saved.`);
-          refreshTree();
-        } else {
-          ctx.vscode.window.showErrorMessage('Failed to save. Are you logged in?');
-        }
+        ctx.vscode.window.showInformationMessage(`Connection "${label}" saved.`);
+        refreshTree();
       }
 
       // ---------------------------------------------------------------
@@ -484,7 +471,7 @@ export function createAccountPlugin(): Plugin {
       async function deleteProfileFlow(profileToDelete?: ConnectionProfile): Promise<void> {
         let profile = profileToDelete;
         if (!profile) {
-          const profiles = storage.getUserProfiles();
+          const profiles = storage.getProfiles();
           if (profiles.length === 0) {
             ctx.vscode.window.showInformationMessage('No saved connections.');
             return;
@@ -517,13 +504,9 @@ export function createAccountPlugin(): Plugin {
       // ---------------------------------------------------------------
 
       ctx.services.register('account', {
-        get isLoggedIn() { return storage.isLoggedIn; },
-        get currentUser() { return storage.currentUser; },
         get connectedProfile() { return connectedProfile; },
-        login: () => loginFlow(),
-        logout: () => doLogout(),
-        getProfiles: () => storage.getUserProfiles(),
-        addProfile: (p: any) => storage.addProfile(p),
+        getProfiles: () => storage.getProfiles(),
+        addProfile: (p: any) => storage.addProfileSimple(p),
         deleteProfile: (id: string) => { storage.deleteProfile(id); refreshTree(); },
         connectProfile: (p: ConnectionProfile) => connectToProfile(p),
       });
