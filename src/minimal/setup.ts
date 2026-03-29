@@ -182,8 +182,9 @@ const minimalServices: IEditorOverrideServices = {
   ...getAuthenticationServiceOverride(),
   ...getExtensionGalleryServiceOverride({ webOnly: false }),
   // ...getViewsServiceOverride(),
-  ...getChatServiceOverride(),
-  ...getAiServiceOverride(),
+  // Chat/AI overrides removed — they require GitHub Copilot Chat (not on Open VSX)
+  // ...getChatServiceOverride(),
+  // ...getAiServiceOverride(),
 };
 
 // ---------------------------------------------------------------------------
@@ -200,6 +201,15 @@ const constructOptions: IWorkbenchConstructionOptions = {
   productConfiguration: {
     nameShort: 'WebTerminal',
     nameLong: 'WebTerminal Minimal',
+    extensionsGallery: {
+      serviceUrl: 'https://open-vsx.org/vscode/gallery',
+      resourceUrlTemplate:
+        'https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/{path}',
+      extensionUrlTemplate:
+        'https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest',
+      controlUrl: '',
+      nlsBaseUrl: '',
+    },
   },
   workspaceProvider: {
     trusted: true,
