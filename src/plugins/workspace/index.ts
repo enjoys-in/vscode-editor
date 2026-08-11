@@ -5,6 +5,7 @@ import {
   registerFileSystemOverlay,
 } from '@codingame/monaco-vscode-files-service-override';
 import { SFTPClient, type SFTPConnectOptions, type SFTPEntry } from './sftp-client';
+import { setSftpCredentials } from '../../minimal/sftp-session';
 
 // ---------------------------------------------------------------------------
 // Workspace Plugin — lets users load files from multiple sources
@@ -128,6 +129,14 @@ export function createWorkspacePlugin(options?: WorkspacePluginOptions): Plugin 
 
         async sftpConnect(opts: SFTPConnectOptions): Promise<void> {
           await sftp.connect(opts);
+          setSftpCredentials({
+            bridgeUrl: opts.bridgeUrl,
+            host: opts.host,
+            port: opts.port ?? 22,
+            username: opts.username,
+            password: opts.password,
+            privateKey: opts.privateKey,
+          });
           ctx.vscode.window.showInformationMessage(
             `Connected to ${opts.host} via SFTP`,
           );
@@ -160,6 +169,7 @@ export function createWorkspacePlugin(options?: WorkspacePluginOptions): Plugin 
 
         sftpDisconnect(): void {
           sftp.disconnect();
+          setSftpCredentials(null);
         },
 
         get sftpConnected(): boolean {

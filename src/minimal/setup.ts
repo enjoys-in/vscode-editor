@@ -56,7 +56,10 @@ import getExplorerServiceOverride from '@codingame/monaco-vscode-explorer-servic
 import getQuickAccessServiceOverride from '@codingame/monaco-vscode-quickaccess-service-override';
 import getWorkbenchServiceOverride from '@codingame/monaco-vscode-workbench-service-override';
 import getExtensionGalleryServiceOverride from '@codingame/monaco-vscode-extension-gallery-service-override';
+import getTerminalServiceOverride from '@codingame/monaco-vscode-terminal-service-override';
 // import getViewsServiceOverride from '@codingame/monaco-vscode-views-service-override';
+
+import { SocketTerminalBackend } from './terminal-backend';
  
 
 // Minimal default extensions — just themes + icons
@@ -194,6 +197,7 @@ const minimalServices: IEditorOverrideServices = {
     ...getSecretStorageServiceOverride(),
     ...getAuthenticationServiceOverride(),
     ...getExtensionGalleryServiceOverride({ webOnly: false, }),
+    ...getTerminalServiceOverride(new SocketTerminalBackend()),
     // ...getViewsServiceOverride(),
 
    
@@ -215,7 +219,7 @@ const constructOptions: IWorkbenchConstructionOptions = {
     productConfiguration: {
         nameShort: 'Terminus',
         nameLong: 'Terminus',
-        version: '1.0.0',
+        version: '1.1.0',
         extensionsGallery: {
             serviceUrl: 'https://open-vsx.org/vscode/gallery',
             resourceUrlTemplate:
@@ -298,7 +302,7 @@ export async function initializeMonaco(
         {
             name: 'webterminal-minimal',
             publisher: 'webterminal',
-            version: '1.0.0',
+            version: '1.1.0',
             engines: { vscode: '*' },
         },
         ExtensionHostKind.LocalProcess,

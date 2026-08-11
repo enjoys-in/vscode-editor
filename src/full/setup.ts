@@ -521,7 +521,7 @@ export async function initializeMonaco(
     {
       name: 'webterminal-editor',
       publisher: 'webterminal',
-      version: '1.0.0',
+      version: '1.1.0',
       engines: { vscode: '*' },
     },
     ExtensionHostKind.LocalProcess,

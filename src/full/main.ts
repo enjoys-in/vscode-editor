@@ -13,6 +13,7 @@ Promise.all([
   import('@plugins/keybindings'),
   import('@plugins/workspace'),
   import('@plugins/account'),
+  import('@plugins/ai-chat'),
 ]).then(async ([
   { App },
   { createThemePlugin },
@@ -21,6 +22,7 @@ Promise.all([
   { createKeybindingsPlugin },
   { createWorkspacePlugin },
   { createAccountPlugin },
+  { createAIChatPlugin },
 ]) => {
   // ---- Create the app ----
   const app = new App({
@@ -53,6 +55,9 @@ Promise.all([
 
   // Account — login/register + saved SFTP connection profiles
   app.registerPlugin(createAccountPlugin());
+
+  // AI Chat — Copilot-style chat panel (enabled by default)
+  app.registerPlugin(createAIChatPlugin());
 
   // ---- Example: user-created plugin ----
   // This shows how easy it is for a user to create a plugin using the full

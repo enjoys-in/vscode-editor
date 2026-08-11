@@ -68,6 +68,16 @@ export function createAccountPlugin(): Plugin {
                 },
               ],
             },
+            commands: [
+              { command: 'sftp.editProfile', title: 'Edit Connection', icon: '$(edit)' },
+              { command: 'sftp.deleteProfile', title: 'Delete Connection', icon: '$(trash)' },
+            ],
+            menus: {
+              'view/item/context': [
+                { command: 'sftp.editProfile', when: 'view == sftp-connections-view && viewItem == sftp-profile', group: 'inline@1' },
+                { command: 'sftp.deleteProfile', when: 'view == sftp-connections-view && viewItem == sftp-profile', group: 'inline@2' },
+              ],
+            },
           },
         } as any,
         ExtensionHostKind.LocalProcess,
@@ -87,7 +97,8 @@ export function createAccountPlugin(): Plugin {
         onDidChangeEmitter = new vscodeApi.EventEmitter<SftpTreeItem | undefined>();
 
         disposables.push(vscodeApi.commands.registerCommand('sftp.addProfile', () => addProfileFlow()));
-        disposables.push(vscodeApi.commands.registerCommand('sftp.deleteProfile', (p?: ConnectionProfile) => deleteProfileFlow(p)));
+        disposables.push(vscodeApi.commands.registerCommand('sftp.editProfile', (arg?: unknown) => editProfileFlow(toProfile(arg))));
+        disposables.push(vscodeApi.commands.registerCommand('sftp.deleteProfile', (arg?: unknown) => deleteProfileFlow(toProfile(arg))));
         disposables.push(vscodeApi.commands.registerCommand('sftp.connectProfile', (p: ConnectionProfile) => connectToProfile(p)));
         disposables.push(vscodeApi.commands.registerCommand('sftp.disconnect', () => {
           const workspace = ctx.services.get<any>('workspace');
@@ -171,6 +182,7 @@ export function createAccountPlugin(): Plugin {
                 break;
               case 'profile':
                 item.iconPath = new vscodeApi.ThemeIcon('server');
+                item.contextValue = 'sftp-profile';
                 item.command = {
                   command: 'sftp.connectProfile',
                   title: 'Connect',
@@ -379,6 +391,100 @@ export function createAccountPlugin(): Plugin {
       }
 
       // ---------------------------------------------------------------
+      // Edit Profile flow
+      // ---------------------------------------------------------------
+
+      /** Resolve a command argument that may be a tree element or a raw profile. */
+      function toProfile(arg: unknown): ConnectionProfile | undefined {
+        if (!arg || typeof arg !== 'object') return undefined;
+        const a = arg as { profile?: ConnectionProfile; id?: string; host?: string };
+        if (a.profile) return a.profile;
+        if (a.id && a.host) return arg as ConnectionProfile;
+        return undefined;
+      }
+
+      async function pickProfile(placeHolder: string): Promise<ConnectionProfile | undefined> {
+        const profiles = storage.getProfiles();
+        if (profiles.length === 0) {
+          ctx.vscode.window.showInformationMessage('No saved connections.');
+          return undefined;
+        }
+        const items = profiles.map((p) => ({
+          label: p.label,
+          description: `${p.username}@${p.host}:${p.port}`,
+          id: p.id,
+        }));
+        const pick = await ctx.vscode.window.showQuickPick(items, { placeHolder });
+        if (!pick) return undefined;
+        return profiles.find((p) => p.id === (pick as any).id);
+      }
+
+      async function editProfileFlow(profileToEdit?: ConnectionProfile): Promise<void> {
+        const profile = profileToEdit ?? (await pickProfile('Select a connection to edit'));
+        if (!profile) return;
+
+        const label = await ctx.vscode.window.showInputBox({
+          prompt: 'Connection name',
+          value: profile.label,
+        });
+        if (!label) return;
+
+        const host = await ctx.vscode.window.showInputBox({
+          prompt: 'SFTP Host',
+          value: profile.host,
+        });
+        if (!host) return;
+
+        const portStr = await ctx.vscode.window.showInputBox({
+          prompt: 'SSH Port',
+          value: String(profile.port),
+        });
+        const port = parseInt(portStr || '22', 10);
+
+        const username = await ctx.vscode.window.showInputBox({
+          prompt: 'SSH Username',
+          value: profile.username,
+        });
+        if (!username) return;
+
+        const authMethod = await ctx.vscode.window.showQuickPick(
+          ['Password', 'Private Key (entered at connect time)'],
+          { placeHolder: 'Authentication method' },
+        );
+        if (!authMethod) return;
+
+        let password = profile.password;
+        if (authMethod === 'Password') {
+          const entered = await ctx.vscode.window.showInputBox({
+            prompt: 'SSH Password (leave empty to keep current)',
+            password: true,
+          });
+          if (entered) password = entered;
+        } else {
+          password = undefined;
+        }
+
+        const bridgeUrl = await ctx.vscode.window.showInputBox({
+          prompt: 'SFTP Bridge WebSocket URL',
+          value: profile.bridgeUrl,
+        });
+        if (!bridgeUrl) return;
+
+        storage.updateProfile(profile.id, {
+          label,
+          bridgeUrl,
+          host,
+          port,
+          username,
+          password,
+          usePrivateKey: authMethod.startsWith('Private'),
+        });
+
+        ctx.vscode.window.showInformationMessage(`Connection "${label}" updated.`);
+        refreshTree();
+      }
+
+      // ---------------------------------------------------------------
       // Delete Profile flow
       // ---------------------------------------------------------------
 
@@ -421,6 +527,7 @@ export function createAccountPlugin(): Plugin {
         get connectedProfile() { return connectedProfile; },
         getProfiles: () => storage.getProfiles(),
         addProfile: (p: any) => storage.addProfile(p),
+        updateProfile: (id: string, patch: any) => { storage.updateProfile(id, patch); refreshTree(); },
         deleteProfile: (id: string) => { storage.deleteProfile(id); refreshTree(); },
         connectProfile: (p: ConnectionProfile) => connectToProfile(p),
       });

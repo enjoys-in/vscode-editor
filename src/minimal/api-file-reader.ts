@@ -5,7 +5,7 @@ import {
   registerFileSystemOverlay,
 } from '@codingame/monaco-vscode-files-service-override';
 import { SftpSocket, type SftpFileEntry } from './sftp-socket';
-import { API_CONFIG, apiUrl } from './config';
+import { API_CONFIG, apiUrl, IS_DEV } from './config';
 
 // ---------------------------------------------------------------------------
 // API File Reader Plugin
@@ -90,6 +90,8 @@ export function createApiFileReaderPlugin(options?: ApiFileReaderOptions): Plugi
       }
 
       async function retryOnSessionError<T>(fn: () => Promise<T>, label: string): Promise<T> {
+        // Dev mode: run once and surface errors without the blocking modal.
+        if (IS_DEV) return await fn();
         while (true) {
           try {
             return await fn();

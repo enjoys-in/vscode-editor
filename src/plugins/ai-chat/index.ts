@@ -452,6 +452,8 @@ export function createAIChatPlugin(options?: AIChatOptions): Plugin {
             if (container) {
               svc.moveViewContainerToLocation(container, /* AuxiliaryBar */ 2);
             }
+            // Enabled by default — reveal the chat panel on startup
+            void vscodeApi.commands.executeCommand('ai-chat-view.focus');
           } catch (e) {
             console.warn('[AI Chat] Could not move to auxiliary bar:', e);
           }

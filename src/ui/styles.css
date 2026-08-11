@@ -11,3 +11,20 @@ html, body {
   height: 100vh;
   width: 100vw;
 }
+
+/* Replace the default (blue) product icon in the title bar with our favicon */
+.monaco-workbench .part.titlebar .window-appicon,
+.monaco-workbench .titlebar-left .window-appicon {
+  background-image: url('/favicon.svg') !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: 16px 16px !important;
+  -webkit-mask: none !important;
+  mask: none !important;
+}
+
+.monaco-workbench .part.titlebar .window-appicon::before,
+.monaco-workbench .part.titlebar .window-appicon > .codicon {
+  content: '' !important;
+  display: none !important;
+}

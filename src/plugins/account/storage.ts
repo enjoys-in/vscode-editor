@@ -66,4 +66,16 @@ export class ConnectionStorage {
     this.saveProfiles(profiles);
     return true;
   }
+
+  updateProfile(
+    id: string,
+    patch: Partial<Omit<ConnectionProfile, 'id' | 'createdAt'>>,
+  ): boolean {
+    const profiles = this.getProfiles();
+    const idx = profiles.findIndex((p) => p.id === id);
+    if (idx === -1) return false;
+    profiles[idx] = { ...profiles[idx], ...patch };
+    this.saveProfiles(profiles);
+    return true;
+  }
 }
