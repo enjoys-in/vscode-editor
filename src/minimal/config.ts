@@ -49,3 +49,24 @@ export const APP_ENV = String(import.meta.env.VITE_APP_ENV ?? 'prod');
  * without a `tabId`/`path`. Default (prod) enforces a valid, existing session.
  */
 export const IS_DEV = APP_ENV.toUpperCase() === 'DEV';
+
+// ---------------------------------------------------------------------------
+// GitHub OAuth
+// ---------------------------------------------------------------------------
+
+export const GITHUB_CONFIG = {
+  /** GitHub OAuth App client id (public). Set VITE_GITHUB_CLIENT_ID in .env. */
+  clientId: String(import.meta.env.VITE_GITHUB_CLIENT_ID ?? ''),
+
+  /** Scopes requested at sign-in. */
+  scopes: ['read:user', 'user:email', 'repo'],
+
+  /**
+   * Backend route that receives GitHub's OAuth redirect, exchanges the `code`
+   * for a token using the client secret (kept server-side), then returns an
+   * HTML page that calls:
+   *   window.opener.postMessage({ type:'github-auth', token, state }, '*')
+   * and closes itself. This is the `redirect_uri` registered on the OAuth App.
+   */
+  callbackPath: '/api/auth/github/callback',
+} as const;

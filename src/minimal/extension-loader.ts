@@ -53,9 +53,18 @@ export async function loadVsixFromBuffer(buffer: ArrayBuffer, name?: string): Pr
   const extId = `${manifest.publisher}.${manifest.name}`;
   console.log(`[ExtensionLoader] Installing ${extId}@${manifest.version}`);
 
+  // Honor any proposed APIs the extension declares by registering it as a
+  // trusted (system) extension — the drop-in equivalent of --enable-proposed-api.
+  const proposals = (manifest as { enabledApiProposals?: unknown }).enabledApiProposals;
+  const needsProposedApi = Array.isArray(proposals) ? proposals.length > 0 : !!proposals;
+  if (needsProposedApi) {
+    console.log(`[ExtensionLoader] ${extId} requests proposed APIs:`, proposals);
+  }
+
   const { registerFileUrl } = registerExtension(
     manifest,
     ExtensionHostKind.LocalProcess,
+    needsProposedApi ? { system: true } : undefined,
   );
 
   for (const [filePath, content] of Object.entries(files)) {

@@ -220,6 +220,23 @@ const constructOptions: IWorkbenchConstructionOptions = {
         nameShort: 'Terminus',
         nameLong: 'Terminus',
         version: '1.1.0',
+        // Grants proposed APIs to extensions (equivalent of --enable-proposed-api).
+        // NB: Copilot also needs a Node agent host + official-client entitlement,
+        // so this alone will not make it fully functional.
+        extensionEnabledApiProposals: {
+            'github.copilot': ['inlineCompletionsAdditions'],
+            'github.copilot-chat': [
+                'chatParticipantAdditions', 'chatParticipantPrivate', 'defaultChatParticipant',
+                'chatProvider', 'chatVariableResolver', 'chatReferenceBinaryData', 'chatEditing',
+                'languageModels', 'languageModelSystem', 'languageModelCapabilities',
+                'languageModelChatProvider', 'languageModelTools', 'embeddings',
+                'mappedEditsProvider', 'newSymbolNamesProvider', 'inlineCompletionsAdditions',
+                'interactive', 'findTextInFiles', 'findTextInFiles2', 'textSearchProvider',
+                'textSearchProvider2', 'terminalDataWriteEvent', 'terminalExecuteCommandEvent',
+                'terminalSelection', 'documentFiltersExclusive', 'notebookVariableProvider',
+                'aiRelatedInformation',
+            ],
+        },
         extensionsGallery: {
             serviceUrl: 'https://open-vsx.org/vscode/gallery',
             resourceUrlTemplate:

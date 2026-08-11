@@ -8,6 +8,7 @@ import { MinimalApp } from './app';
 import { createWorkspacePlugin } from '@plugins/workspace';
 import { createAICompletionPlugin } from '@plugins/ai-completion';
 import { createAccountPlugin } from '@plugins/account';
+import { createGithubAuthPlugin } from '@plugins/github-auth';
 import { createAIChatPlugin } from '@plugins/ai-chat';
 import { createApiFileReaderPlugin } from './api-file-reader';
 import { enableVsixDragAndDrop } from './extension-loader';
@@ -39,6 +40,9 @@ async function main() {
 
   // SFTP connections — sidebar panel + saved connection profiles
   app.registerPlugin(createAccountPlugin());
+
+  // GitHub authentication — vscode.authentication provider ('github')
+  app.registerPlugin(createGithubAuthPlugin());
 
   // API File Reader — loads files from POST /api/file/read
   // Uses URL query params: ?path=/remote/dir&tabId=sftp_xxx
